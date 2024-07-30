@@ -10,7 +10,7 @@ export type RootStackParamList = {
   Login: undefined;
 };
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App = () => {
 
@@ -19,7 +19,13 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen name="Home" component={Home} />
-        <Stack.Screen name="Login" component={Login} options={{title: 'Welcome to CWallet'}} />
+        <Stack.Screen name="Login" component={Login} options={{
+          title: 'CWallet', 
+          headerStyle: {
+            backgroundColor: '#3D5AFE',
+          },
+          headerTintColor: '#fff',
+        }} />
       </Stack.Navigator>
     </NavigationContainer>
   )
