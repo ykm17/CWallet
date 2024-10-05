@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "566381520762",
+    "project_id": "cwallet-8aac8",
+    "storage_bucket": "cwallet-8aac8.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:566381520762:android:2a99e3e5f2608d83e818c3",
+        "android_client_info": {
+          "package_name": "com.cwallet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "566381520762-2fmt01rpdo310sglqm8ripg8pun2i2hs.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cwallet",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "566381520762-men69odgck2o91alaa6fm6stubjpr1ng.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpWRZPbLCkLb75bSZfb_wuME6D6HVqlsE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "566381520762-men69odgck2o91alaa6fm6stubjpr1ng.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.cwallet"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
