@@ -38,6 +38,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         return () => unsubscribe();
     }, []);
 
+    
     const signInWithGoogle = async (): Promise<boolean> => {
         try {
             // Check if your device supports Google Play

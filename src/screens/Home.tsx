@@ -1,6 +1,10 @@
-import { View, Text, SafeAreaView, StyleSheet, ScrollView } from 'react-native'
-import React from 'react'
+import { View, Text, SafeAreaView, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import React, { useEffect } from 'react'
 import CustomCard from '../components/CustomCard';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../App';
+import auth from '@react-native-firebase/auth';
 
 const cards = [
   {
@@ -104,9 +108,29 @@ const cards = [
     limit: "25000"
   }
 ];
+type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
+const Home: React.FC<Props> = ({ navigation }) => {
 
-const Home = () => {
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => <TouchableOpacity onPress={signOutUser}><Text>Logout</Text></TouchableOpacity>,
+    });
+  }, []);
+
+  const signOutUser = async () => {
+    try {
+      // Sign out from Firebase
+      await auth().signOut();
+      // Sign out from Google
+      await GoogleSignin.signOut();
+      navigation.navigate('Login');
+      console.log('User signed out from Firebase and Google');
+    } catch (error) {
+      console.error('Sign-out Error:', error);
+    }
+  };
+  
   return (
     <SafeAreaView style={styles.mainContainer}>
       <View>

@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, SafeAreaView } from 'react-native'
+import { StyleSheet, View, Text, SafeAreaView, Touchable, TouchableOpacity } from 'react-native'
 import React from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -19,10 +19,10 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen name="Home" component={Home} options={{
-          headerLeft: ()=><></>,
-        }}/>
+          headerLeft: () => <></>,
+        }} />
         <Stack.Screen name="Login" component={Login} options={{
-          title: 'CWallet', 
+          title: 'CWallet',
           headerStyle: {
             backgroundColor: '#3D5AFE',
           },
