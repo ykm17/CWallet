@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>566381520762-2fmt01rpdo310sglqm8ripg8pun2i2hs.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDZsW0ruItkNAQjntRrOptr0YYmRlhh-os</string>
+	<key>GCM_SENDER_ID</key>
+	<string>566381520762</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.cwallet</string>
+	<key>PROJECT_ID</key>
+	<string>cwallet-8aac8</string>
+	<key>STORAGE_BUCKET</key>
+	<string>cwallet-8aac8.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:566381520762:ios:9e4900bd6abdf6cbe818c3</string>
+</dict>
+</plist>

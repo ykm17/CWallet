@@ -48,5 +48,22 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj</string> <!-- Replace with your REVERSED_CLIENT_ID -->
+			</array>
+		</dict>
+	</array>
+
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechrome</string>
+		<string>com.google.chrome.ios</string>
+		<string>googlechromes</string>
+		<string>com.google.chrome.ios.sso</string>
+	</array>
 </dict>
 </plist>
