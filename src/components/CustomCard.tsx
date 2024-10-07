@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 import React from 'react'
-import { Card } from '../types/Card'
+import { Card } from '../types/Types'
 
 interface CardProps {
   cardDetails: Card

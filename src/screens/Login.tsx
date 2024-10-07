@@ -6,7 +6,7 @@ import { RootStackParamList } from '../App'
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useEffect, useState } from 'react';
-import { WEB_CLIENT_ID } from '../constants/constants';
+import { WEB_CLIENT_ID } from '../constants/Constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
