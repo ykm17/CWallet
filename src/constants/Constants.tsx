@@ -4,10 +4,10 @@ export const WEB_CLIENT_ID: string = '566381520762-men69odgck2o91alaa6fm6stubjpr
 
 // Create the dictionary constant
 export const BANK_DICTIONARY: BankDictionary = {
-    HD: "HDFC",
-    IC: "ICICI",
-    AX: "AXIS",
-    HS: "HSBC",
+    HD: "HDFC Bank",
+    IC: "ICICI Bank",
+    AX: "Axis Bank",
+    HS: "HSBC Bank",
     KT: "Kotak Mahindra Bank",
     ID: "IDFC First Bank",
     SB: "State Bank of India",
@@ -19,3 +19,6 @@ export const BANK_DICTIONARY: BankDictionary = {
     BB: "Bank of Baroda",
     AU: "AU Small Finance Bank",
 };
+
+export const ENV: string = 'testing'; //'production';
+

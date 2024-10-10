@@ -1,20 +1,38 @@
 import { StyleSheet, Text, View } from 'react-native'
 import React from 'react'
 import { Card } from '../types/Types'
+import { formatCardNumber } from '../util/Utils'
 
 interface CardProps {
   cardDetails: Card
 }
 
 const CustomCard: React.FC<CardProps> = ({ cardDetails }) => {
+
   return (
     <View style={styles.container}>
-      <Text style={styles.bankName}>{cardDetails.bankName}</Text>
-      <Text style={styles.cardDetails}>{cardDetails.number}</Text>
-      <Text style={styles.cardDetails}>Exp: {cardDetails.month}/{cardDetails.year}</Text>
-      <Text style={styles.cardDetails}>CVV: {cardDetails.cvv}</Text>
-      <Text style={styles.cardDetails}>Limit: {cardDetails.limit}</Text>
-      <Text style={styles.cardDetails}>Owner: {cardDetails.ownerName}</Text>
+
+      <Text style={styles.heading}>{cardDetails.name}</Text>
+      <Text style={styles.heading}>{cardDetails.limit}</Text>
+
+      <View style={styles.cardNumberSection}>
+        <Text style={styles.title}>CARD NUMBER</Text>
+        <Text style={styles.subTitle}>{formatCardNumber(cardDetails.number)}</Text>
+      </View>
+
+      <View style={styles.expirySection}>
+        <View>
+          <Text style={styles.title}>EXPIRY & CVV</Text>
+          <Text style={styles.subTitle}>{cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}</Text>
+        </View>
+        <View>
+          <Text style={[styles.title, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
+          <Text style={styles.subTitle}>{cardDetails.bankName}</Text>
+        </View>
+      </View>
+
+
+
     </View>
   )
 }
@@ -22,10 +40,16 @@ export default CustomCard
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#424242',
-    padding: 10,
-    margin: 10,
+    backgroundColor: '#1B1B1B',
+    padding: 18,
+    marginTop: 12,
+    marginStart: 10,
+    marginEnd: 10,
     borderRadius: 10
+  },
+  heading: {
+    alignSelf: 'flex-end',
+    color: 'white'
   },
   bankName: {
     color: '#ffffff',
@@ -33,5 +57,23 @@ const styles = StyleSheet.create({
   cardDetails: {
     color: '#ffffff',
   },
+  title: {
+    color: '#ffffff',
+    fontSize: 10
+  },
+  subTitle: {
+    color: '#ffffff',
+    fontSize: 20
+  },
+  expirySection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10
+  },
+  cardNumberSection: {
+    marginBottom: 12,
+    marginTop: 30
+  }
+
 
 })
