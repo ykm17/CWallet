@@ -13,6 +13,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 const Login: React.FC<Props> = ({ navigation }) => {
 
     const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+    const [loginDisabled, setLoginDisabled] = useState(false);
 
     useEffect(() => {
         GoogleSignin.configure({
@@ -66,6 +67,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
     };
 
     const handleSignIn = async () => {
+        setLoginDisabled(true);
         let isUserAuthenticated = await signInWithGoogle();
         if (isUserAuthenticated) {
             navigation.replace('Home');
@@ -77,8 +79,10 @@ const Login: React.FC<Props> = ({ navigation }) => {
             <View style={styles.imageContainer}>
                 <Image source={require('../assets/images/login.png')} style={styles.loginImage}></Image>
             </View>
+            <Text style={styles.title}>CWallet</Text>
+
             <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
-            <TouchableOpacity style={styles.button} onPress={handleSignIn}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loginDisabled}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
             {/* () => navigation.navigate('Home') */}
         </View>
     )
@@ -95,25 +99,31 @@ const styles = StyleSheet.create({
     },
     button: {
         alignItems: 'center',
-        backgroundColor: '#3D5AFE',
-        padding: 15,
-        borderRadius: 10,
+        backgroundColor: 'black',
+        padding: 16,
+        borderRadius: 18,
     },
     buttonText: {
         color: '#ffffff'
     },
     description: {
-        color: '#2196F3',
+        color: 'black',
         marginBottom: 30,
         textAlign: 'center',
         fontSize: 20,
+        fontWeight: '600'
+    },
+    title:{
+        color: 'black',
+        marginBottom: 30,
+        textAlign: 'center',
+        fontSize: 25,
         fontWeight: '600'
     },
     loginImage: {
         width: 300,
         height: 300,
         margin: 10,
-        marginBottom: 30,
     },
     imageContainer: {
         elevation: 10, // Android

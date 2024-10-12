@@ -22,11 +22,14 @@ const App = () => {
           headerLeft: () => <></>,
         }} />
         <Stack.Screen name="Login" component={Login} options={{
-          title: 'CWallet',
-          headerStyle: {
-            backgroundColor: '#3D5AFE',
-          },
-          headerTintColor: '#fff',
+          // title: 'CWallet',
+          // headerTitleAlign:'center',
+          // headerTransparent: true,
+          // headerTintColor: '#000000',
+          // headerTitleStyle:{
+          //   fontSize:20
+          // }
+          headerShown: false
         }} />
       </Stack.Navigator>
     </NavigationContainer>

@@ -117,7 +117,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       await auth().signOut();
       // Sign out from Google
       await GoogleSignin.signOut();
-      navigation.navigate('Login');
+      navigation.replace('Login');
       console.log('User signed out from Firebase and Google');
     } catch (error) {
       console.error('Sign-out Error:', error);
