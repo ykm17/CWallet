@@ -1,4 +1,4 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, BackHandler } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import CustomCard from '../components/CustomCard';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -8,7 +8,7 @@ import auth from '@react-native-firebase/auth';
 import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
 import { FAB, Modal, Portal, Text, Button, PaperProvider, TextInput, HelperText, Menu, Divider } from 'react-native-paper';
-import { isEmpty, isNull } from 'lodash'; // Import lodash isEmpty
+import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import database from '@react-native-firebase/database';
 import { formatCardNumber } from '../util/Utils';
@@ -18,7 +18,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 const Home: React.FC<Props> = ({ navigation }) => {
   const reference = database().ref(ENV + '/cards');
 
-  const [visible, setVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   //Modal input fields
   const [cardOwnerName, setCardOwnerName] = useState("");
   const [cardBankName, setCardBankName] = useState("");
@@ -28,6 +28,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [cardCvv, setCardCvv] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardLimit, setCardLimit] = useState("");
+  const [isFormValid, setIsFormValid] = useState(false);
+  const [dropDownVisible, setDropDownVisible] = React.useState(false);
+  const [cardData, setCardData] = useState<Card[]>([]);
   const [errors, setErrors] = useState<Card>({
     ownerName: '',
     bankName: '',
@@ -38,17 +41,21 @@ const Home: React.FC<Props> = ({ navigation }) => {
     name: '',
     limit: ''
   });
-  const [isFormValid, setIsFormValid] = useState(false);
-
-  const [dropDownVisible, setDropDownVisible] = React.useState(false);
-  const [cardData, setCardData] = useState<Card[]>([]);
-
+  const [touched, setTouched] = useState<Card>({
+    ownerName: '',
+    bankName: '',
+    number: '',
+    month: '',
+    year: '',
+    cvv: '',
+    name: '',
+    limit: ''
+  });
   const openMenu = () => setDropDownVisible(true);
   const closeMenu = () => setDropDownVisible(false);
-
-  const showModal = () => setVisible(true);
+  const showModal = () => setModalVisible(true);
   const hideModal = () => {
-    setVisible(false);
+    setModalVisible(false);
     setCardOwnerName("");
     setCardBankName("");
     setCardNumber("");
@@ -57,6 +64,17 @@ const Home: React.FC<Props> = ({ navigation }) => {
     setCardCvv("");
     setCardName("");
     setCardLimit("");
+    setTouched({
+      ownerName: '',
+      bankName: '',
+      number: '',
+      month: '',
+      year: '',
+      cvv: '',
+      name: '',
+      limit: ''
+    });  // Reset touched fields
+
   }
 
   useEffect(() => {
@@ -70,18 +88,25 @@ const Home: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-
     const onValueChange = reference.on('value', (snapshot) => {
       const data = snapshot.val(); // Get the data from snapshot
       if (data) {
-
-        setCardData(Object.values(data) as Card[]); // Convert to array if needed
+        setCardData(Object.values(data) as Card[] ?? []); // Convert to array if needed
         console.log(Object.values(data));
+      } else {
+        setCardData([]);
       }
-      //setLoading(false); // Set loading to false once data is fetched
     });
 
-    // Cleanup listener on unmount
+    const onChildRemoved = reference.on('child_removed', (snapshot) => {
+      const data = snapshot.val(); // Get the data from snapshot
+      if (data) {
+        setCardData(Object.values(data) as Card[] ?? []); // Convert to array if needed
+        console.log(Object.values(data));
+      } else {
+        setCardData([]);
+      }
+    });
     //return () => reference.off('value', onValueChange);
   }, []);
 
@@ -117,16 +142,16 @@ const Home: React.FC<Props> = ({ navigation }) => {
     if (isEmpty(cardBankName)) {
       validationErrors.bankName = "Please select bank name";
     }
-    if (isEmpty(cardNumber) || !/^\d+$/.test(cardNumber)) {
+    if (isEmpty(cardNumber) || !/^(\d{4}\s?){3}\d{4}$/.test(cardNumber) || cardNumber.length !== 19) {
       validationErrors.number = "Card number is empty or invalid";
     }
-    if (isEmpty(cardMonth) || !/^\d+$/.test(cardMonth)) {
+    if (isEmpty(cardMonth) || !/^(0[1-9]|1[0-2])$/.test(cardMonth) || cardMonth.length !== 2) {
       validationErrors.month = "Card month is empty or invalid";
     }
-    if (isEmpty(cardYear) || !/^\d+$/.test(cardYear)) {
+    if (isEmpty(cardYear) || !/^(?:[1-9]|[1-9][0-9])$/.test(cardYear) || cardYear.length !== 2) {
       validationErrors.year = "Card year is empty or invalid";
     }
-    if (isEmpty(cardCvv) || !/^\d+$/.test(cardCvv)) {
+    if (isEmpty(cardCvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(cardCvv) || cardCvv.length !== 3) {
       validationErrors.cvv = "CVV is empty or invalid";
     }
     if (isEmpty(cardName)) {
@@ -165,30 +190,65 @@ const Home: React.FC<Props> = ({ navigation }) => {
       setCardCvv("");
       setCardName("");
       setCardLimit("");
+      setTouched({
+        ownerName: '',
+        bankName: '',
+        number: '',
+        month: '',
+        year: '',
+        cvv: '',
+        name: '',
+        limit: ''
+      });  // Reset touched fields
       //.then(() => console.log('Data submitted'));
 
     } else {
-
       // Form is invalid, display error messages
       console.log('Form has errors. Please correct them.');
     }
+  };
+
+  const handleBlur = (field: keyof Card) => {
+    setTouched((prevState) => ({ ...prevState, [field]: true }));
   };
 
   return (
     <SafeAreaView style={styles.mainContainer}>
       <View style={{ flex: 1 }}>
         <Portal>
-          <Modal visible={visible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
+          <Modal visible={modalVisible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
+            <Text style={styles.modelTitle} variant="headlineMedium">Fill details to add new card !</Text>
             <ScrollView>
-              <Text style={styles.modelTitle} variant="headlineMedium">Fill details to add new card !</Text>
+              <View style={styles.formElements} >
+                <Menu
+                  contentStyle={{ backgroundColor: 'white' }}
+                  visible={dropDownVisible}
+                  onDismiss={closeMenu}
+                  anchor={<Button onPress={openMenu} style={styles.dropDownButton} labelStyle={{ color: 'white', width: '100%' }}>{BANK_DICTIONARY[cardBankName] ?? "Select Bank"}</Button>}>
+                  {
+                    Object.keys(BANK_DICTIONARY).map((item, index) => (
+                      <Menu.Item onPress={() => (setCardBankName(item), closeMenu())} title={BANK_DICTIONARY[item]} key={index} />
+                    ))
+                  }
+                </Menu>
+              </View>
+              {
+                touched.bankName && isEmpty(cardBankName) &&
+                <HelperText type="error">
+                  {errors.bankName}
+                </HelperText>
+              }
               <TextInput
                 label="Card owner name"
                 value={cardOwnerName}
                 placeholder="Name printed on your card"
                 onChangeText={text => setCardOwnerName(text)}
+                mode="outlined"
+                onBlur={() => handleBlur('ownerName')}
+                style={[styles.formElements]}
               />
               {
-                isEmpty(cardOwnerName) &&
+                touched.ownerName && isEmpty(cardOwnerName) &&
                 <HelperText type="error">
                   {errors.ownerName}
                 </HelperText>
@@ -200,10 +260,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 onChangeText={text => setCardNumber(formatCardNumber(text))}
                 maxLength={19}
                 keyboardType="numeric"
-               
+                mode="outlined"
+                onBlur={() => handleBlur('number')}
+                style={styles.formElements}
               />
               {
-                (isEmpty(cardNumber) || !/^\d+$/.test(cardNumber)) &&
+                touched.number && (cardNumber.length === 0 || !/^(\d{4}\s?){3}\d{4}$/.test(cardNumber) || cardNumber.length !== 19) &&
                 <HelperText type="error">
                   {errors.number}
                 </HelperText>
@@ -215,9 +277,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 value={cardMonth}
                 onChangeText={text => setCardMonth(text)}
                 maxLength={2}
+                keyboardType="numeric"
+                mode="outlined"
+                onBlur={() => handleBlur('month')}
+                style={styles.formElements}
               />
               {
-                (isEmpty(cardMonth) || !/^\d+$/.test(cardMonth)) &&
+                touched.month && (isEmpty(cardMonth) || !/^(0[1-9]|1[0-2])$/.test(cardMonth) || cardMonth.length !== 2) &&
                 <HelperText type="error">
                   {errors.month}
                 </HelperText>
@@ -228,9 +294,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 value={cardYear}
                 onChangeText={text => setCardYear(text)}
                 maxLength={2}
+                keyboardType="numeric"
+                mode="outlined"
+                onBlur={() => handleBlur('year')}
+                style={styles.formElements}
               />
               {
-                (isEmpty(cardYear) || !/^\d+$/.test(cardYear)) &&
+                touched.year && (isEmpty(cardYear) || !/^(?:[1-9]|[1-9][0-9])$/.test(cardYear) || cardYear.length !== 2) &&
                 <HelperText type="error">
                   {errors.year}
                 </HelperText>
@@ -241,38 +311,28 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 value={cardCvv}
                 onChangeText={text => setCardCvv(text)}
                 maxLength={3}
+                keyboardType="numeric"
+                mode="outlined"
+                onBlur={() => handleBlur('cvv')}
+                style={styles.formElements}
               />
               {
-                (isEmpty(cardCvv) || !/^\d+$/.test(cardCvv)) &&
+                touched.cvv && (isEmpty(cardCvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(cardCvv) || cardCvv.length !== 3) &&
                 <HelperText type="error">
                   {errors.cvv}
                 </HelperText>
               }
-
-              <Menu
-                visible={dropDownVisible}
-                onDismiss={closeMenu}
-                anchor={<Button onPress={openMenu}>{BANK_DICTIONARY[cardBankName] ?? "Select Bank"}</Button>}>
-                {
-                  Object.keys(BANK_DICTIONARY).map((item, index) => (
-                    <Menu.Item onPress={() => (setCardBankName(item), closeMenu())} title={BANK_DICTIONARY[item]} key={index} />
-
-                  ))
-                }
-              </Menu>
-              {
-                isEmpty(cardBankName) &&
-                <HelperText type="error">
-                  {errors.bankName}
-                </HelperText>
-              }
               <TextInput
+                style={styles.formElements}
                 label="Card name"
+                placeholder="Type/name of card"
                 value={cardName}
                 onChangeText={text => setCardName(text)}
+                mode="outlined"
+                onBlur={() => handleBlur('name')}
               />
               {
-                isEmpty(cardName) &&
+                touched.name && isEmpty(cardName) &&
                 <HelperText type="error">
                   {errors.name}
                 </HelperText>
@@ -283,25 +343,34 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 value={cardLimit}
                 onChangeText={text => setCardLimit(text)}
                 maxLength={12}
+                keyboardType="numeric"
+                mode="outlined"
+                onBlur={() => handleBlur('limit')}
+                style={styles.formElements}
               />
               {
-                (isEmpty(cardLimit) || !/^\d+$/.test(cardLimit)) &&
+                touched.limit && (isEmpty(cardLimit) || !/^\d+$/.test(cardLimit)) &&
                 <HelperText type="error">
                   {errors.limit}
                 </HelperText>
               }
-              <Button icon="send-circle" mode="contained" onPress={handleSubmit} disabled={!isFormValid}>
+              <Button icon="send-circle" mode="contained" onPress={handleSubmit} disabled={!isFormValid} style={styles.button}              >
                 Submit
               </Button>
             </ScrollView>
           </Modal>
         </Portal>
+
+
         <FlatList
           data={cardData}
           renderItem={({ item }) => (<CustomCard cardDetails={item}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 10 }}
+          contentContainerStyle={[{ flexGrow: 1 }, cardData.length ? null : { justifyContent: 'center' }]}
+          ListEmptyComponent={<Text style={{ fontSize: 20, alignSelf: 'center' }}>{'No cards found!'}</Text>}
         />
+
         <FAB
           label="Add"
           style={styles.fab}
@@ -328,8 +397,27 @@ const styles = StyleSheet.create({
   containerStyle: {
     backgroundColor: 'white',
     padding: 20,
+    marginHorizontal: 10,
+    marginVertical: 60,
+    borderRadius: 10
   },
   modelTitle: {
-    fontSize: 20,
+    fontSize: 22,
+    alignSelf: 'center',
+    margin: 10,
+    color: 'black'
+  },
+  formElements: {
+    marginVertical: 2,
+    backgroundColor: 'white'
+  },
+  button: {
+    marginVertical: 6,
+  },
+  menuButton: {
+
+  },
+  dropDownButton: {
+    backgroundColor: 'black',
   }
 })

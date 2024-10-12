@@ -11,13 +11,14 @@ import { WEB_CLIENT_ID } from '../constants/Constants';
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const Login: React.FC<Props> = ({ navigation }) => {
+
+    const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+
     useEffect(() => {
         GoogleSignin.configure({
             webClientId: WEB_CLIENT_ID,  // from Firebase Console
         });
     }, []);
-
-    const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
 
     // Check if the user is already signed in
     useEffect(() => {
@@ -25,7 +26,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
             if (currentUser) {
                 // User is signed in
                 setUser(currentUser);
-                navigation.navigate('Home');
+                navigation.replace('Home');
                 console.log('User is signed in:', currentUser);
             } else {
                 // No user is signed in
@@ -38,7 +39,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         return () => unsubscribe();
     }, []);
 
-    
+
     const signInWithGoogle = async (): Promise<boolean> => {
         try {
             // Check if your device supports Google Play
@@ -67,7 +68,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
     const handleSignIn = async () => {
         let isUserAuthenticated = await signInWithGoogle();
         if (isUserAuthenticated) {
-            navigation.navigate('Home');
+            navigation.replace('Home');
         }
     }
 

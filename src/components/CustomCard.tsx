@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native'
 import React from 'react'
 import { Card } from '../types/Types'
-import { formatCardNumber } from '../util/Utils'
+import Clipboard from '@react-native-clipboard/clipboard'
+import { formatCardNumber, removeSpaceFromString } from '../util/Utils'
 
 interface CardProps {
   cardDetails: Card
@@ -9,6 +10,10 @@ interface CardProps {
 
 const CustomCard: React.FC<CardProps> = ({ cardDetails }) => {
 
+  
+  const copyToClipboard = () => {
+    Clipboard.setString(removeSpaceFromString(cardDetails.number)); // Copy the text to clipboard
+  };
   return (
     <View style={styles.container}>
 
@@ -17,7 +22,9 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails }) => {
 
       <View style={styles.cardNumberSection}>
         <Text style={styles.title}>CARD NUMBER</Text>
-        <Text style={styles.subTitle}>{formatCardNumber(cardDetails.number)}</Text>
+        <TouchableWithoutFeedback onLongPress={copyToClipboard}>
+          <Text style={styles.subTitle}>{formatCardNumber(cardDetails.number)}</Text>
+        </TouchableWithoutFeedback>
       </View>
 
       <View style={styles.expirySection}>
