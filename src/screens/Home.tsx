@@ -173,7 +173,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       reference
         .push({
           ownerName: cardOwnerName,
-          bankName: BANK_DICTIONARY[cardBankName],
+          bankName: cardBankName,
           number: cardNumber,
           month: cardMonth,
           year: cardYear,
@@ -240,7 +240,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               }
               <TextInput
                 label="Card owner name"
-                value={cardOwnerName}
+                //value={cardOwnerName}
                 placeholder="Name printed on your card"
                 onChangeText={text => setCardOwnerName(text)}
                 mode="outlined"
@@ -274,7 +274,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry month"
                 placeholder="00"
-                value={cardMonth}
+                //value={cardMonth}
                 onChangeText={text => setCardMonth(text)}
                 maxLength={2}
                 keyboardType="numeric"
@@ -291,7 +291,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry year"
                 placeholder="00"
-                value={cardYear}
+                //value={cardYear}
                 onChangeText={text => setCardYear(text)}
                 maxLength={2}
                 keyboardType="numeric"
@@ -308,7 +308,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="CVV"
                 placeholder="000"
-                value={cardCvv}
+                //value={cardCvv}
                 onChangeText={text => setCardCvv(text)}
                 maxLength={3}
                 keyboardType="numeric"
@@ -326,7 +326,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
                 label="Card name"
                 placeholder="Type/name of card"
-                value={cardName}
+                //value={cardName}
                 onChangeText={text => setCardName(text)}
                 mode="outlined"
                 onBlur={() => handleBlur('name')}
@@ -340,7 +340,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Limit"
                 placeholder="Your credit card limit"
-                value={cardLimit}
+                //value={cardLimit}
                 onChangeText={text => setCardLimit(text)}
                 maxLength={12}
                 keyboardType="numeric"
@@ -354,7 +354,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   {errors.limit}
                 </HelperText>
               }
-              <Button icon="send-circle" mode="contained" onPress={handleSubmit} disabled={!isFormValid} style={styles.button}              >
+              <Button icon="send-circle" mode="contained" onTouchEnd={handleSubmit} disabled={!isFormValid} style={styles.button}              >
                 Submit
               </Button>
             </ScrollView>
@@ -364,7 +364,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         <FlatList
           data={cardData}
-          renderItem={({ item }) => (<CustomCard cardDetails={item}></CustomCard>)}
+          renderItem={({ item }) => (<CustomCard cardDetails={{...item,bankName:BANK_DICTIONARY[item.bankName]}} bankId={item.bankName}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 10 }}
           contentContainerStyle={[{ flexGrow: 1 }, cardData.length ? null : { justifyContent: 'center' }]}

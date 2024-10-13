@@ -3,38 +3,57 @@ import React from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { formatCardNumber, removeSpaceFromString } from '../util/Utils'
+import { BANK_COLORS } from '../constants/Constants'
+import { Icon, MD3Colors } from 'react-native-paper'
 
 interface CardProps {
-  cardDetails: Card
+  cardDetails: Card,
+  bankId: string,
 }
 
-const CustomCard: React.FC<CardProps> = ({ cardDetails }) => {
+const CustomCard: React.FC<CardProps> = ({ cardDetails, bankId }) => {
 
-  
+
   const copyToClipboard = () => {
     Clipboard.setString(removeSpaceFromString(cardDetails.number)); // Copy the text to clipboard
   };
+  console.log("YASH: ", cardDetails);
   return (
-    <View style={styles.container}>
-
-      <Text style={styles.heading}>{cardDetails.name}</Text>
-      <Text style={styles.heading}>{cardDetails.limit}</Text>
-
-      <View style={styles.cardNumberSection}>
-        <Text style={styles.title}>CARD NUMBER</Text>
-        <TouchableWithoutFeedback onLongPress={copyToClipboard}>
-          <Text style={styles.subTitle}>{formatCardNumber(cardDetails.number)}</Text>
-        </TouchableWithoutFeedback>
+    <View style={[styles.container, { backgroundColor: BANK_COLORS[bankId] }]}>
+      <View style={styles.spaceContainer}>
+        <View>
+          <Text style={styles.heading_1}>{'Card Owner'}</Text>
+          <Text style={styles.subheading_1}>{cardDetails.ownerName}</Text>
+        </View>
+        {/* <View>
+          <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>{cardDetails.name}</Text>
+          <Text style={styles.subheading_1}>{cardDetails.limit}</Text>
+        </View> */}
+         <View style={{alignSelf:'center'}}>
+          <Icon
+            source="credit-card-chip"
+            color="white"
+            size={40}
+          />
+        </View>
+      </View>
+      <View style={[styles.spaceContainer]}>
+        <View style={styles.cardNumberSection}>
+          <Text style={styles.heading_1}>CARD NUMBER</Text>
+          <TouchableWithoutFeedback onLongPress={copyToClipboard}>
+            <Text style={styles.subheading_2}>{formatCardNumber(cardDetails.number)}</Text>
+          </TouchableWithoutFeedback>
+        </View>
       </View>
 
-      <View style={styles.expirySection}>
+      <View style={styles.spaceContainer}>
         <View>
-          <Text style={styles.title}>EXPIRY & CVV</Text>
-          <Text style={styles.subTitle}>{cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}</Text>
+          <Text style={styles.heading_1}>EXPIRY & CVV</Text>
+          <Text style={styles.subheading_2}>{cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}</Text>
         </View>
         <View>
-          <Text style={[styles.title, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
-          <Text style={styles.subTitle}>{cardDetails.bankName}</Text>
+          <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
+          <Text style={styles.subheading_2}>{cardDetails.bankName}</Text>
         </View>
       </View>
 
@@ -54,32 +73,31 @@ const styles = StyleSheet.create({
     marginEnd: 10,
     borderRadius: 10
   },
-  heading: {
-    alignSelf: 'flex-end',
-    color: 'white'
-  },
-  bankName: {
-    color: '#ffffff',
-  },
-  cardDetails: {
-    color: '#ffffff',
-  },
-  title: {
-    color: '#ffffff',
+  heading_1: {
+    alignSelf: 'flex-start',
+    color: 'white',
     fontSize: 10
   },
-  subTitle: {
+  heading_2: {
+    alignSelf: 'flex-end',
+    color: 'white',
+    fontSize: 10
+  },
+  subheading_1: {
+    color: 'white'
+  },
+  subheading_2: {
     color: '#ffffff',
     fontSize: 20
   },
-  expirySection: {
+  spaceContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10
   },
   cardNumberSection: {
-    marginBottom: 12,
-    marginTop: 30
+    marginBottom: 0,
+    marginTop: 10
   }
 
 
