@@ -3,63 +3,69 @@ import React from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { formatCardNumber, removeSpaceFromString } from '../util/Utils'
-import { BANK_COLORS } from '../constants/Constants'
-import { Icon, MD3Colors } from 'react-native-paper'
+import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants'
+import { Icon } from 'react-native-paper'
 
 interface CardProps {
   cardDetails: Card,
-  bankId: string,
+  onCardLongPress: (card: Card) => void
 }
 
-const CustomCard: React.FC<CardProps> = ({ cardDetails, bankId }) => {
+const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
 
-
-  const copyToClipboard = () => {
+  const copyNumberToClipboard = () => {
     Clipboard.setString(removeSpaceFromString(cardDetails.number)); // Copy the text to clipboard
   };
+
+  const copyCardDetialsToClipboard = () => {
+    Clipboard.setString(`Bank Name: ${BANK_DICTIONARY[cardDetails.bankName]}\nName: ${cardDetails.ownerName}\nCard No: ${cardDetails.number}\nExp: ${cardDetails.month}/${cardDetails.year}\nCvv: ${cardDetails.cvv}`); // Copy the text to clipboard
+  };
+
   console.log("YASH: ", cardDetails);
   return (
-    <View style={[styles.container, { backgroundColor: BANK_COLORS[bankId] }]}>
-      <View style={styles.spaceContainer}>
-        <View>
-          <Text style={styles.heading_1}>{'Card Owner'}</Text>
-          <Text style={styles.subheading_1}>{cardDetails.ownerName}</Text>
-        </View>
-        {/* <View>
+    <TouchableWithoutFeedback onLongPress={() => { onCardLongPress(cardDetails) }}>
+
+      <View style={[styles.container, { backgroundColor: BANK_COLORS[cardDetails.bankName] }]}>
+        <View style={styles.spaceContainer}>
+          <View>
+            <Text style={styles.heading_1}>{'Card Owner'}</Text>
+            <Text style={styles.subheading_1}>{cardDetails.ownerName} {'(' + cardDetails.limit + ')'}</Text>
+          </View>
+          {/* <View>
           <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>{cardDetails.name}</Text>
           <Text style={styles.subheading_1}>{cardDetails.limit}</Text>
         </View> */}
-         <View style={{alignSelf:'center'}}>
-          <Icon
-            source="credit-card-chip"
-            color="white"
-            size={40}
-          />
-        </View>
-      </View>
-      <View style={[styles.spaceContainer]}>
-        <View style={styles.cardNumberSection}>
-          <Text style={styles.heading_1}>CARD NUMBER</Text>
-          <TouchableWithoutFeedback onLongPress={copyToClipboard}>
-            <Text style={styles.subheading_2}>{formatCardNumber(cardDetails.number)}</Text>
+          <TouchableWithoutFeedback onLongPress={copyCardDetialsToClipboard}>
+            <View style={{ alignSelf: 'center' }}>
+              <Icon
+                source="credit-card-chip"
+                color="white"
+                size={40}
+              />
+            </View>
           </TouchableWithoutFeedback>
+
+        </View>
+        <View style={[styles.spaceContainer]}>
+          <View style={styles.cardNumberSection}>
+            <Text style={styles.heading_1}>CARD NUMBER</Text>
+            <TouchableWithoutFeedback onLongPress={copyNumberToClipboard}>
+              <Text style={styles.subheading_2}>{cardDetails.number}</Text>
+            </TouchableWithoutFeedback>
+          </View>
+        </View>
+        <View style={styles.spaceContainer}>
+          <View>
+            <Text style={styles.heading_1}>EXPIRY & CVV</Text>
+            <Text style={styles.subheading_2}>{cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}</Text>
+          </View>
+          <View>
+            <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
+            <Text style={styles.subheading_2}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
+          </View>
         </View>
       </View>
-
-      <View style={styles.spaceContainer}>
-        <View>
-          <Text style={styles.heading_1}>EXPIRY & CVV</Text>
-          <Text style={styles.subheading_2}>{cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}</Text>
-        </View>
-        <View>
-          <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
-          <Text style={styles.subheading_2}>{cardDetails.bankName}</Text>
-        </View>
-      </View>
-
-
-
-    </View>
+    </TouchableWithoutFeedback>
   )
 }
 export default CustomCard

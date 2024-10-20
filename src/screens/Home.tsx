@@ -1,5 +1,5 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, BackHandler } from 'react-native'
-import React, { useEffect, useState } from 'react'
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
 import CustomCard from '../components/CustomCard';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,30 +7,35 @@ import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
-import { FAB, Modal, Portal, Text, Button, PaperProvider, TextInput, HelperText, Menu, Divider } from 'react-native-paper';
+import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import database from '@react-native-firebase/database';
 import { formatCardNumber } from '../util/Utils';
+import { decryptCardData, encryptCardData } from '../util/Crypto';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const Home: React.FC<Props> = ({ navigation }) => {
   const reference = database().ref(ENV + '/cards');
-
+  const isModelForUpdate = useRef(false);
+  const openMenu = () => setDropDownVisible(true);
+  const closeMenu = () => setDropDownVisible(false);
   const [modalVisible, setModalVisible] = useState(false);
-  //Modal input fields
-  const [cardOwnerName, setCardOwnerName] = useState("");
-  const [cardBankName, setCardBankName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardMonth, setCardMonth] = useState("");
-  const [cardYear, setCardYear] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [cardLimit, setCardLimit] = useState("");
   const [isFormValid, setIsFormValid] = useState(false);
   const [dropDownVisible, setDropDownVisible] = React.useState(false);
   const [cardData, setCardData] = useState<Card[]>([]);
+  const [card, setCard] = useState<Card>({
+    ownerName: '',
+    bankName: '',
+    number: '',
+    month: '',
+    year: '',
+    cvv: '',
+    name: '',
+    limit: '',
+    key: ''
+  });
   const [errors, setErrors] = useState<Card>({
     ownerName: '',
     bankName: '',
@@ -39,7 +44,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
     year: '',
     cvv: '',
     name: '',
-    limit: ''
+    limit: '',
+    key: ''
   });
   const [touched, setTouched] = useState<Card>({
     ownerName: '',
@@ -49,21 +55,22 @@ const Home: React.FC<Props> = ({ navigation }) => {
     year: '',
     cvv: '',
     name: '',
-    limit: ''
+    limit: '',
+    key: ''
   });
-  const openMenu = () => setDropDownVisible(true);
-  const closeMenu = () => setDropDownVisible(false);
-  const showModal = () => setModalVisible(true);
-  const hideModal = () => {
-    setModalVisible(false);
-    setCardOwnerName("");
-    setCardBankName("");
-    setCardNumber("");
-    setCardMonth("");
-    setCardYear("");
-    setCardCvv("");
-    setCardName("");
-    setCardLimit("");
+
+  const resetCardData = () => {
+    setCard({
+      ownerName: '',
+      bankName: '',
+      number: '',
+      month: '',
+      year: '',
+      cvv: '',
+      name: '',
+      limit: '',
+      key: ''
+    });
     setTouched({
       ownerName: '',
       bankName: '',
@@ -72,14 +79,35 @@ const Home: React.FC<Props> = ({ navigation }) => {
       year: '',
       cvv: '',
       name: '',
-      limit: ''
-    });  // Reset touched fields
+      limit: '',
+      key: ''
+    });
+  }
+  
+  const showModal = (card: Card) => {
 
+    if (!isEmpty(card.bankName)) {
+      isModelForUpdate.current = true;
+      setCard(card);
+      //setCard(card);
+
+      console.log("\n\n");
+      console.log("LOGGER 1: ", card);
+      console.log("LOGGER 1: ", isModelForUpdate);
+      console.log("\n\n");
+    } else {
+      console.log("LOGGER 2");
+    }
+    setModalVisible(true);
+  }
+  const hideModal = () => {
+    setModalVisible(false);
+    resetCardData();
   }
 
   useEffect(() => {
     validateForm();
-  }, [cardOwnerName, cardBankName, cardNumber, cardMonth, cardYear, cardCvv, cardName, cardLimit]);
+  }, [card]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -90,23 +118,19 @@ const Home: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const onValueChange = reference.on('value', (snapshot) => {
       const data = snapshot.val(); // Get the data from snapshot
+
       if (data) {
-        setCardData(Object.values(data) as Card[] ?? []); // Convert to array if needed
-        console.log(Object.values(data));
+        let cardList: Card[] = [];
+        Object.keys(data).forEach(eachkey => {
+          let card: Card = decryptCardData(data[eachkey]) as Card;
+          cardList.push({...card,key:eachkey});
+        });
+        setCardData(cardList); 
       } else {
         setCardData([]);
       }
     });
 
-    const onChildRemoved = reference.on('child_removed', (snapshot) => {
-      const data = snapshot.val(); // Get the data from snapshot
-      if (data) {
-        setCardData(Object.values(data) as Card[] ?? []); // Convert to array if needed
-        console.log(Object.values(data));
-      } else {
-        setCardData([]);
-      }
-    });
     //return () => reference.off('value', onValueChange);
   }, []);
 
@@ -125,6 +149,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   const validateForm = () => {
+    console.log("LOGGER 3: ", card);
+
     let validationErrors: Card = {
       ownerName: '',
       bankName: '',
@@ -133,31 +159,32 @@ const Home: React.FC<Props> = ({ navigation }) => {
       year: '',
       cvv: '',
       name: '',
-      limit: ''
+      limit: '',
+      key: ''
     };
 
-    if (isEmpty(cardOwnerName)) {
+    if (isEmpty(card.ownerName)) {
       validationErrors.ownerName = "Owner name is required";
     }
-    if (isEmpty(cardBankName)) {
+    if (isEmpty(card.bankName)) {
       validationErrors.bankName = "Please select bank name";
     }
-    if (isEmpty(cardNumber) || !/^(\d{4}\s?){3}\d{4}$/.test(cardNumber) || cardNumber.length !== 19) {
+    if (isEmpty(card.number) || !/^(\d{4}\s?){3}\d{4}$/.test(card.number) || card.number.length !== 19) {
       validationErrors.number = "Card number is empty or invalid";
     }
-    if (isEmpty(cardMonth) || !/^(0[1-9]|1[0-2])$/.test(cardMonth) || cardMonth.length !== 2) {
+    if (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) {
       validationErrors.month = "Card month is empty or invalid";
     }
-    if (isEmpty(cardYear) || !/^(?:[1-9]|[1-9][0-9])$/.test(cardYear) || cardYear.length !== 2) {
+    if (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2) {
       validationErrors.year = "Card year is empty or invalid";
     }
-    if (isEmpty(cardCvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(cardCvv) || cardCvv.length !== 3) {
+    if (isEmpty(card.cvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(card.cvv) || card.cvv.length !== 3) {
       validationErrors.cvv = "CVV is empty or invalid";
     }
-    if (isEmpty(cardName)) {
+    if (isEmpty(card.name)) {
       validationErrors.name = "Card name cannot be empty";
     }
-    if (isEmpty(cardLimit) || !/^\d+$/.test(cardLimit)) {
+    if (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) {
       validationErrors.limit = "Card limit is empty or invalid";
     }
 
@@ -169,39 +196,17 @@ const Home: React.FC<Props> = ({ navigation }) => {
     if (isFormValid) {
 
       // Form is valid, perform the submission logic
-      console.log('Form submitted successfully!');
-      reference
-        .push({
-          ownerName: cardOwnerName,
-          bankName: cardBankName,
-          number: cardNumber,
-          month: cardMonth,
-          year: cardYear,
-          cvv: cardCvv,
-          name: cardName,
-          limit: cardLimit,
-        });
-      hideModal();
-      setCardOwnerName("");
-      setCardBankName("");
-      setCardNumber("");
-      setCardMonth("");
-      setCardYear("");
-      setCardCvv("");
-      setCardName("");
-      setCardLimit("");
-      setTouched({
-        ownerName: '',
-        bankName: '',
-        number: '',
-        month: '',
-        year: '',
-        cvv: '',
-        name: '',
-        limit: ''
-      });  // Reset touched fields
-      //.then(() => console.log('Data submitted'));
+      console.log('Form submitted successfully! ');
 
+      if (isModelForUpdate.current) {
+        reference.child(card.key).set(encryptCardData(card));
+        isModelForUpdate.current = false;
+      } else {
+        reference.push(encryptCardData(card));
+      }
+
+      hideModal();
+      resetCardData();
     } else {
       // Form is invalid, display error messages
       console.log('Form has errors. Please correct them.');
@@ -217,47 +222,47 @@ const Home: React.FC<Props> = ({ navigation }) => {
       <View style={{ flex: 1 }}>
         <Portal>
           <Modal visible={modalVisible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
-            <Text style={styles.modelTitle} variant="headlineMedium">Fill details to add new card !</Text>
+            <Text style={styles.modelTitle} variant="headlineMedium">{`${isModelForUpdate.current?'Update your':'Add new'} card.`}</Text>
             <ScrollView>
-              <View style={styles.formElements} >
+              <View style={[styles.formElements,{marginBottom:10}]} >
                 <Menu
                   contentStyle={{ backgroundColor: 'white' }}
                   visible={dropDownVisible}
                   onDismiss={closeMenu}
-                  anchor={<Button onPress={openMenu} style={styles.dropDownButton} labelStyle={{ color: 'white', width: '100%' }}>{BANK_DICTIONARY[cardBankName] ?? "Select Bank"}</Button>}>
+                  anchor={<Button onPress={openMenu} style={styles.dropDownButton} labelStyle={{ color: 'white', width: '100%' }}>{BANK_DICTIONARY[card.bankName] ?? "Select Bank"}</Button>}>
                   {
                     Object.keys(BANK_DICTIONARY).map((item, index) => (
-                      <Menu.Item onPress={() => (setCardBankName(item), closeMenu())} title={BANK_DICTIONARY[item]} key={index} />
+                      <Menu.Item onPress={() => (setCard({ ...card, bankName: item }), closeMenu())} title={BANK_DICTIONARY[item]} key={index} />
                     ))
                   }
                 </Menu>
               </View>
               {
-                touched.bankName && isEmpty(cardBankName) &&
+                touched.bankName && isEmpty(card.bankName) &&
                 <HelperText type="error">
                   {errors.bankName}
                 </HelperText>
               }
               <TextInput
                 label="Card owner name"
-                //value={cardOwnerName}
+                defaultValue={card.ownerName}
                 placeholder="Name printed on your card"
-                onChangeText={text => setCardOwnerName(text)}
+                onChangeText={text => setCard({ ...card, ownerName: text })}
                 mode="outlined"
                 onBlur={() => handleBlur('ownerName')}
                 style={[styles.formElements]}
               />
               {
-                touched.ownerName && isEmpty(cardOwnerName) &&
+                touched.ownerName && isEmpty(card.ownerName) &&
                 <HelperText type="error">
                   {errors.ownerName}
                 </HelperText>
               }
               <TextInput
                 label="Card Number"
-                value={cardNumber}
+                value={card.number}
                 placeholder="0000 0000 0000 0000"
-                onChangeText={text => setCardNumber(formatCardNumber(text))}
+                onChangeText={text => setCard({ ...card, number: formatCardNumber(text) })}
                 maxLength={19}
                 keyboardType="numeric"
                 mode="outlined"
@@ -265,7 +270,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.number && (cardNumber.length === 0 || !/^(\d{4}\s?){3}\d{4}$/.test(cardNumber) || cardNumber.length !== 19) &&
+                touched.number && (card.number.length === 0 || !/^(\d{4}\s?){3}\d{4}$/.test(card.number) || card.number.length !== 19) &&
                 <HelperText type="error">
                   {errors.number}
                 </HelperText>
@@ -274,8 +279,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry month"
                 placeholder="00"
-                //value={cardMonth}
-                onChangeText={text => setCardMonth(text)}
+                defaultValue={card.month}
+                onChangeText={text => setCard({ ...card, month: text })}
                 maxLength={2}
                 keyboardType="numeric"
                 mode="outlined"
@@ -283,7 +288,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.month && (isEmpty(cardMonth) || !/^(0[1-9]|1[0-2])$/.test(cardMonth) || cardMonth.length !== 2) &&
+                touched.month && (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) &&
                 <HelperText type="error">
                   {errors.month}
                 </HelperText>
@@ -291,8 +296,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry year"
                 placeholder="00"
-                //value={cardYear}
-                onChangeText={text => setCardYear(text)}
+                defaultValue={card.year}
+                onChangeText={text => setCard({ ...card, year: text })}
                 maxLength={2}
                 keyboardType="numeric"
                 mode="outlined"
@@ -300,7 +305,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.year && (isEmpty(cardYear) || !/^(?:[1-9]|[1-9][0-9])$/.test(cardYear) || cardYear.length !== 2) &&
+                touched.year && (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2) &&
                 <HelperText type="error">
                   {errors.year}
                 </HelperText>
@@ -308,8 +313,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="CVV"
                 placeholder="000"
-                //value={cardCvv}
-                onChangeText={text => setCardCvv(text)}
+                defaultValue={card.cvv}
+                onChangeText={text => setCard({ ...card, cvv: text })}
                 maxLength={3}
                 keyboardType="numeric"
                 mode="outlined"
@@ -317,7 +322,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.cvv && (isEmpty(cardCvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(cardCvv) || cardCvv.length !== 3) &&
+                touched.cvv && (isEmpty(card.cvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(card.cvv) || card.cvv.length !== 3) &&
                 <HelperText type="error">
                   {errors.cvv}
                 </HelperText>
@@ -326,13 +331,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
                 label="Card name"
                 placeholder="Type/name of card"
-                //value={cardName}
-                onChangeText={text => setCardName(text)}
+                defaultValue={card.cvv}
+                onChangeText={text => setCard({ ...card, name: text })}
                 mode="outlined"
                 onBlur={() => handleBlur('name')}
               />
               {
-                touched.name && isEmpty(cardName) &&
+                touched.name && isEmpty(card.name) &&
                 <HelperText type="error">
                   {errors.name}
                 </HelperText>
@@ -340,8 +345,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Limit"
                 placeholder="Your credit card limit"
-                //value={cardLimit}
-                onChangeText={text => setCardLimit(text)}
+                defaultValue={card.limit}
+                onChangeText={text => setCard({ ...card, limit: text })}
                 maxLength={12}
                 keyboardType="numeric"
                 mode="outlined"
@@ -349,7 +354,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.limit && (isEmpty(cardLimit) || !/^\d+$/.test(cardLimit)) &&
+                touched.limit && (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) &&
                 <HelperText type="error">
                   {errors.limit}
                 </HelperText>
@@ -364,7 +369,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         <FlatList
           data={cardData}
-          renderItem={({ item }) => (<CustomCard cardDetails={{...item,bankName:BANK_DICTIONARY[item.bankName]}} bankId={item.bankName}></CustomCard>)}
+          renderItem={({ item }) => (<CustomCard cardDetails={item} onCardLongPress={showModal}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 10 }}
           contentContainerStyle={[{ flexGrow: 1 }, cardData.length ? null : { justifyContent: 'center' }]}
@@ -375,7 +380,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
           label="Add"
           style={styles.fab}
           color="white"
-          onPress={showModal}
+          onPress={() => {
+            showModal(card)
+          }}
         />
       </View>
     </SafeAreaView>

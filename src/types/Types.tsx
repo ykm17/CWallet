@@ -7,6 +7,7 @@ export interface Card {
     cvv: string,
     name: string,
     limit: string,
+    key: string
 }
 
 // Define the dictionary type

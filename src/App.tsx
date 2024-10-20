@@ -20,6 +20,9 @@ const App = () => {
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen name="Home" component={Home} options={{
           headerLeft: () => <></>,
+          headerTitleAlign: 'center',
+          statusBarColor: 'white',
+          statusBarStyle: 'dark'
         }} />
         <Stack.Screen name="Login" component={Login} options={{
           // title: 'CWallet',
