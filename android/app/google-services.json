@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "566381520762",
+    "firebase_url": "https://cwallet-8aac8-default-rtdb.firebaseio.com",
     "project_id": "cwallet-8aac8",
     "storage_bucket": "cwallet-8aac8.appspot.com"
   },
@@ -19,6 +20,14 @@
           "android_info": {
             "package_name": "com.cwallet",
             "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "566381520762-apvs0hp778r4i7au0okp40vbh0028chl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cwallet",
+            "certificate_hash": "07ff0c797154252141be0e238dabedb8170f39a4"
           }
         },
         {
