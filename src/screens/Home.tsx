@@ -7,7 +7,7 @@ import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
-import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu } from 'react-native-paper';
+import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import database from '@react-native-firebase/database';
@@ -23,8 +23,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const closeMenu = () => setDropDownVisible(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
-  const [dropDownVisible, setDropDownVisible] = React.useState(false);
+  const [dropDownVisible, setDropDownVisible] = useState(false);
   const [cardData, setCardData] = useState<Card[]>([]);
+  const [isCardPersonal, setIsCardPersonal] = useState('GRP');
   const [card, setCard] = useState<Card>({
     ownerName: '',
     bankName: '',
@@ -34,7 +35,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
     cvv: '',
     name: '',
     limit: '',
-    key: ''
+    key: '',
+    isPersonal: true,
+    email: ''
   });
   const [errors, setErrors] = useState<Card>({
     ownerName: '',
@@ -45,7 +48,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
     cvv: '',
     name: '',
     limit: '',
-    key: ''
+    key: '',
+    isPersonal: true,
+    email: ''
   });
   const [touched, setTouched] = useState<Card>({
     ownerName: '',
@@ -56,9 +61,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
     cvv: '',
     name: '',
     limit: '',
-    key: ''
+    key: '',
+    isPersonal: true,
+    email: ''
   });
-
   const resetCardData = () => {
     setCard({
       ownerName: '',
@@ -69,7 +75,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
       cvv: '',
       name: '',
       limit: '',
-      key: ''
+      key: '',
+      isPersonal: true,
+      email: ''
     });
     setTouched({
       ownerName: '',
@@ -80,25 +88,33 @@ const Home: React.FC<Props> = ({ navigation }) => {
       cvv: '',
       name: '',
       limit: '',
-      key: ''
+      key: '',
+      isPersonal: true,
+      email: ''
     });
   }
-  
   const showModal = (card: Card) => {
 
     if (!isEmpty(card.bankName)) {
-      isModelForUpdate.current = true;
-      setCard(card);
-      //setCard(card);
 
-      console.log("\n\n");
-      console.log("LOGGER 1: ", card);
-      console.log("LOGGER 1: ", isModelForUpdate);
-      console.log("\n\n");
+      if (auth().currentUser?.email === card.email) {
+        isModelForUpdate.current = true;
+        setCard(card);
+        //setCard(card);
+
+        console.log("\n\n");
+        console.log("LOGGER 1: ", card);
+        console.log("LOGGER 1: ", isModelForUpdate);
+        console.log("\n\n");
+        setModalVisible(true);
+
+      } else {
+        //todo:
+      }
     } else {
+      setModalVisible(true);
       console.log("LOGGER 2");
     }
-    setModalVisible(true);
   }
   const hideModal = () => {
     setModalVisible(false);
@@ -123,9 +139,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
         let cardList: Card[] = [];
         Object.keys(data).forEach(eachkey => {
           let card: Card = decryptCardData(data[eachkey]) as Card;
-          cardList.push({...card,key:eachkey});
+
+          cardList.push({ ...card, key: eachkey });
         });
-        setCardData(cardList); 
+        setCardData(cardList);
       } else {
         setCardData([]);
       }
@@ -160,7 +177,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
       cvv: '',
       name: '',
       limit: '',
-      key: ''
+      key: '',
+      isPersonal: true,
+      email: ''
     };
 
     if (isEmpty(card.ownerName)) {
@@ -189,7 +208,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
     }
 
     setErrors(validationErrors);
-    setIsFormValid(Object.values(validationErrors).every(value => value == ''));
+    setIsFormValid(Object.values(validationErrors).every(value => value === '' || value === true));
   };
 
   const handleSubmit = () => {
@@ -202,7 +221,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
         reference.child(card.key).set(encryptCardData(card));
         isModelForUpdate.current = false;
       } else {
-        reference.push(encryptCardData(card));
+        const userEmail = auth().currentUser?.email;
+        if (userEmail) {
+          reference.push(encryptCardData({ ...card, email: userEmail }));
+        } else {
+          console.log("Error");
+        }
       }
 
       hideModal();
@@ -222,9 +246,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
       <View style={{ flex: 1 }}>
         <Portal>
           <Modal visible={modalVisible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
-            <Text style={styles.modelTitle} variant="headlineMedium">{`${isModelForUpdate.current?'Update your':'Add new'} card.`}</Text>
+            <Text style={styles.modelTitle} variant="headlineMedium">{`${isModelForUpdate.current ? 'Update your' : 'Add new'} card.`}</Text>
             <ScrollView>
-              <View style={[styles.formElements,{marginBottom:10}]} >
+              <View style={[styles.formElements, { marginBottom: 10 }]} >
                 <Menu
                   contentStyle={{ backgroundColor: 'white' }}
                   visible={dropDownVisible}
@@ -359,6 +383,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   {errors.limit}
                 </HelperText>
               }
+              <View style={{ flexDirection: 'row', alignSelf: 'flex-end' }}>
+                <Text style={{ marginVertical: 10, fontWeight: 'bold' }}>{'Share with group'}</Text>
+                <Switch value={!card.isPersonal} onValueChange={value => setCard({ ...card, isPersonal: !value })} style={{ marginStart: 10 }} />
+              </View>
               <Button icon="send-circle" mode="contained" onTouchEnd={handleSubmit} disabled={!isFormValid} style={styles.button}              >
                 Submit
               </Button>
@@ -368,14 +396,32 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
 
         <FlatList
-          data={cardData}
+          data={cardData.filter((card) => (isCardPersonal === 'PRL' ? (card.isPersonal && card.email === auth().currentUser?.email) : (!card.isPersonal)))}
           renderItem={({ item }) => (<CustomCard cardDetails={item} onCardLongPress={showModal}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 10 }}
-          contentContainerStyle={[{ flexGrow: 1 }, cardData.length ? null : { justifyContent: 'center' }]}
-          ListEmptyComponent={<Text style={{ fontSize: 20, alignSelf: 'center' }}>{'No cards found!'}</Text>}
+          contentContainerStyle={{ flexGrow: 1 }}
+          ListEmptyComponent={<View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 20 }}>{'No cards found!'}</Text></View>}
         />
-
+        <SegmentedButtons
+          value={isCardPersonal}
+          onValueChange={setIsCardPersonal}
+          buttons={
+            [{
+              value: 'GRP',
+              label: 'Group',
+              style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#ffffff' },
+              checkedColor: '#ffffff'
+            },
+            {
+              value: 'PRL',
+              label: 'Personal',
+              style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#ffffff' },
+              checkedColor: '#ffffff'
+            },
+            ]}
+          style={{ marginVertical: 8, marginHorizontal: 10 }}
+        />
         <FAB
           label="Add"
           style={styles.fab}
@@ -400,6 +446,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B1B1B',
     color: 'black',
     margin: 10,
+    borderRadius: 30
   },
   containerStyle: {
     backgroundColor: 'white',
@@ -411,7 +458,8 @@ const styles = StyleSheet.create({
   modelTitle: {
     fontSize: 22,
     alignSelf: 'center',
-    margin: 10,
+    marginHorizontal: 10,
+    marginBottom: 10,
     color: 'black'
   },
   formElements: {

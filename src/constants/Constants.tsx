@@ -8,16 +8,16 @@ export const BANK_DICTIONARY: BankDictionary = {
     IC: "ICICI Bank",
     AX: "Axis Bank",
     HS: "HSBC Bank",
-    KT: "Kotak Mahindra Bank",
-    ID: "IDFC First Bank",
-    SB: "State Bank of India",
+    KT: "Kotak Bank",
+    ID: "IDFC Bank",
+    SB: "SBI Bank",
     FD: "Federal Bank",
     SW: "Saraswat Bank",
     IN: "IndusInd Bank",
     CT: "Citi Bank",
     RL: "RBL Bank",
-    BB: "Bank of Baroda",
-    AU: "AU Small Finance Bank",
+    BB: "BOB Bank",
+    AU: "AU Bank",
 };
 
 export const BANK_COLORS: BankDictionary = {

@@ -7,7 +7,9 @@ export interface Card {
     cvv: string,
     name: string,
     limit: string,
-    key: string
+    key: string,
+    isPersonal: boolean,
+    email: string,
 }
 
 // Define the dictionary type

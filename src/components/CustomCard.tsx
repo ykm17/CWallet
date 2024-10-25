@@ -1,10 +1,12 @@
-import { StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native'
 import React from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { formatCardNumber, removeSpaceFromString } from '../util/Utils'
-import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants'
-import { Icon } from 'react-native-paper'
+import { removeSpaceFromString } from '../util/Utils'
+import { BANK_COLORS, BANK_DICTIONARY, ENV } from '../constants/Constants'
+import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper'
+import database from '@react-native-firebase/database';
+import auth from '@react-native-firebase/auth';
 
 interface CardProps {
   cardDetails: Card,
@@ -12,6 +14,7 @@ interface CardProps {
 }
 
 const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
+  const reference = database().ref(ENV + '/cards');
 
   const copyNumberToClipboard = () => {
     Clipboard.setString(removeSpaceFromString(cardDetails.number)); // Copy the text to clipboard
@@ -20,6 +23,16 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
   const copyCardDetialsToClipboard = () => {
     Clipboard.setString(`Bank Name: ${BANK_DICTIONARY[cardDetails.bankName]}\nName: ${cardDetails.ownerName}\nCard No: ${cardDetails.number}\nExp: ${cardDetails.month}/${cardDetails.year}\nCvv: ${cardDetails.cvv}`); // Copy the text to clipboard
   };
+  const [isDeletePopupVisible, setIsDeletePopupVisible] = React.useState(false);
+
+  const showDeletePopupDialog = () => setIsDeletePopupVisible(true);
+
+  const hideDeletePopupDialog = () => setIsDeletePopupVisible(false);
+
+  const deleteCard = () => {
+    reference.child(cardDetails.key).remove();
+    hideDeletePopupDialog();
+  }
 
   console.log("YASH: ", cardDetails);
   return (
@@ -53,6 +66,19 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
               <Text style={styles.subheading_2}>{cardDetails.number}</Text>
             </TouchableWithoutFeedback>
           </View>
+
+          {
+            cardDetails.email === auth().currentUser?.email &&
+            <TouchableOpacity style={{ justifyContent: 'center', alignItems: 'center' }} onPress={() => showDeletePopupDialog()}>
+              <Text style={styles.heading_1}>DELETE</Text>
+              <Icon
+                source="delete-empty"
+                color="white"
+                size={20}
+              />
+            </TouchableOpacity>
+          }
+
         </View>
         <View style={styles.spaceContainer}>
           <View>
@@ -64,7 +90,22 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
             <Text style={styles.subheading_2}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
           </View>
         </View>
+        <Portal>
+          <Dialog visible={isDeletePopupVisible} onDismiss={hideDeletePopupDialog}>
+            <Dialog.Icon icon="file-alert" />
+            <Dialog.Title>Confirm deletion</Dialog.Title>
+
+            <Dialog.Content>
+              <Text variant="bodyMedium">{`${cardDetails.number}\n${BANK_DICTIONARY[cardDetails.bankName]}\n${cardDetails.ownerName}`}</Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => deleteCard()}>Delete</Button>
+              <Button onPress={() => hideDeletePopupDialog()}>Cancel</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </View>
+
     </TouchableWithoutFeedback>
   )
 }
