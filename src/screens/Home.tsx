@@ -7,7 +7,7 @@ import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
-import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch } from 'react-native-paper';
+import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import database from '@react-native-firebase/database';
@@ -26,6 +26,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [dropDownVisible, setDropDownVisible] = useState(false);
   const [cardData, setCardData] = useState<Card[]>([]);
   const [isCardPersonal, setIsCardPersonal] = useState('GRP');
+  const [searchQuery, setSearchQuery] = useState('');
+
+
   const [card, setCard] = useState<Card>({
     ownerName: '',
     bankName: '',
@@ -93,6 +96,22 @@ const Home: React.FC<Props> = ({ navigation }) => {
       email: ''
     });
   }
+
+  const filteredCards = cardData.filter((card) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      card.ownerName.toLowerCase().includes(query) ||
+      BANK_DICTIONARY[card.bankName].toLowerCase().includes(query) ||
+      card.number.includes(query) ||
+      card.month.includes(query) ||
+      card.year.includes(query) ||
+      card.cvv.includes(query) ||
+      card.name.toLowerCase().includes(query) ||
+      card.limit.includes(query) ||
+      card.email.toLowerCase().includes(query)
+    );
+  });
+
   const showModal = (card: Card) => {
 
     if (!isEmpty(card.bankName)) {
@@ -394,9 +413,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
           </Modal>
         </Portal>
 
+        <Searchbar
+          placeholder="Search"
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={{ marginHorizontal: 10, marginBottom: 0, marginTop: 15 }}
+        />
 
         <FlatList
-          data={cardData.filter((card) => (isCardPersonal === 'PRL' ? (card.isPersonal && card.email === auth().currentUser?.email) : (!card.isPersonal)))}
+          data={filteredCards.filter((card) => (isCardPersonal === 'PRL' ? (card.isPersonal && card.email === auth().currentUser?.email) : (!card.isPersonal)))}
           renderItem={({ item }) => (<CustomCard cardDetails={item} onCardLongPress={showModal}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 10 }}
@@ -423,7 +448,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
           style={{ marginVertical: 8, marginHorizontal: 10 }}
         />
         <FAB
-          label="Add"
+          icon="plus"
           style={styles.fab}
           color="white"
           onPress={() => {
@@ -446,7 +471,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B1B1B',
     color: 'black',
     margin: 10,
-    borderRadius: 30
+    borderRadius: 30,
+    bottom: 50,
+    right: 10,
+    position: 'absolute',
   },
   containerStyle: {
     backgroundColor: 'white',
