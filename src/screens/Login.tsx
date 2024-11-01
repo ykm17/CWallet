@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native'
 import React from 'react'
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App'
@@ -7,6 +7,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useEffect, useState } from 'react';
 import { WEB_CLIENT_ID } from '../constants/Constants';
+import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -27,7 +28,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
             if (currentUser) {
                 // User is signed in
                 setUser(currentUser);
-                navigation.replace('Home');
+                //check biometric
+                checkBiometricAvailability();
                 console.log('User is signed in:', currentUser);
             } else {
                 // No user is signed in
@@ -40,6 +42,52 @@ const Login: React.FC<Props> = ({ navigation }) => {
         return () => unsubscribe();
     }, []);
 
+    const rnBiometrics = new ReactNativeBiometrics();
+
+    // Check if biometric authentication is available
+    const checkBiometricAvailability = () => {
+        rnBiometrics.isSensorAvailable()
+            .then((result) => {
+                const { available, biometryType } = result;
+
+                if (available && biometryType === BiometryTypes.TouchID) {
+                    console.log('TouchID is available');
+                } else if (available && biometryType === BiometryTypes.FaceID) {
+                    console.log('FaceID is available');
+                } else if (available && biometryType === BiometryTypes.Biometrics) {
+                    console.log('Biometrics are available');
+                } else {
+                    console.log('Biometric authentication not supported');
+                    navigation.replace('Home');
+                    return;
+                }
+                handleBiometricLogin();
+
+            })
+            .catch((error) => {
+                console.log(error);
+            });
+    };
+
+    // Trigger biometric authentication
+    const handleBiometricLogin = () => {
+        rnBiometrics.simplePrompt({ promptMessage: 'Authenticate' })
+            .then((result) => {
+                const { success } = result;
+
+                if (success) {
+                    console.log('Biometric authentication successful');
+                    // Proceed to login or main screen
+                    navigation.replace('Home');
+
+                } else {
+                    console.log('Biometric authentication failed');
+                }
+            })
+            .catch(() => {
+                console.log('Biometric authentication error');
+            });
+    };
 
     const signInWithGoogle = async (): Promise<boolean> => {
         try {
@@ -70,7 +118,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         setLoginDisabled(true);
         let isUserAuthenticated = await signInWithGoogle();
         if (isUserAuthenticated) {
-            navigation.replace('Home');
+            checkBiometricAvailability();
         }
     }
 
@@ -83,7 +131,6 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
             <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
             <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loginDisabled}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
-            {/* () => navigation.navigate('Home') */}
         </View>
     )
 }
@@ -113,7 +160,7 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '600'
     },
-    title:{
+    title: {
         color: 'black',
         marginBottom: 30,
         textAlign: 'center',
