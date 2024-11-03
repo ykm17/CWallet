@@ -417,14 +417,17 @@ const Home: React.FC<Props> = ({ navigation }) => {
           placeholder="Search"
           onChangeText={setSearchQuery}
           value={searchQuery}
-          style={{ marginHorizontal: 10, marginBottom: 0, marginTop: 15 }}
+          style={styles.searchBar}
+          inputStyle={{color:'white'}}
+          iconColor='white'
+          placeholderTextColor='white'
         />
 
         <FlatList
           data={filteredCards.filter((card) => (isCardPersonal === 'PRL' ? (card.isPersonal && card.email === auth().currentUser?.email) : (!card.isPersonal)))}
           renderItem={({ item }) => (<CustomCard cardDetails={item} onCardLongPress={showModal}></CustomCard>)}
           keyExtractor={(item, index) => index.toString()}
-          style={{ flex: 1, marginBottom: 10 }}
+          style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
           ListEmptyComponent={<View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 20 }}>{'No cards found!'}</Text></View>}
         />
@@ -445,7 +448,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               checkedColor: '#ffffff'
             },
             ]}
-          style={{ marginVertical: 8, marginHorizontal: 10 }}
+          style={{ marginVertical: 10, marginHorizontal: 10 }}
         />
         <FAB
           icon="plus"
@@ -472,7 +475,7 @@ const styles = StyleSheet.create({
     color: 'black',
     margin: 10,
     borderRadius: 30,
-    bottom: 50,
+    bottom: 80,
     right: 10,
     position: 'absolute',
   },
@@ -502,5 +505,13 @@ const styles = StyleSheet.create({
   },
   dropDownButton: {
     backgroundColor: 'black',
+  },
+  searchBar: {
+    marginHorizontal: 10,
+    marginTop: 15,
+    marginBottom: 10,
+    elevation: 2,
+    backgroundColor: 'black',
+    color: 'white',
   }
 })

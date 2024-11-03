@@ -34,7 +34,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
     hideDeletePopupDialog();
   }
 
-  console.log("YASH: ", cardDetails);
+  console.log("Logger: ", cardDetails);
   return (
     <TouchableWithoutFeedback onLongPress={() => { onCardLongPress(cardDetails) }}>
 
@@ -87,8 +87,10 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
           </View>
           <View>
             <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
-            <Text style={styles.subheading_2}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
+            <Text style={[styles.subheading_2,{marginBottom:5}]}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
+            <View style={styles.subheading_3}><Text style={styles.highlighted_text}>{cardDetails.name}</Text></View>
           </View>
+
         </View>
         <Portal>
           <Dialog visible={isDeletePopupVisible} onDismiss={hideDeletePopupDialog}>
@@ -140,11 +142,23 @@ const styles = StyleSheet.create({
   spaceContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10
+    marginBottom: 6
   },
   cardNumberSection: {
     marginBottom: 0,
     marginTop: 10
+  },
+  highlighted_text: {
+    color: 'black',
+    fontWeight: '900',
+    width: "auto",
+    fontSize: 10,
+  },
+  subheading_3: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
   }
 
 
