@@ -71,8 +71,11 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
     // Trigger biometric authentication
     const handleBiometricLogin = () => {
+        console.log("\n\nYASH 1\n\n");
         rnBiometrics.simplePrompt({ promptMessage: 'Authenticate' })
             .then((result) => {
+
+        console.log("\n\nYASH 2\n\n",result);
                 const { success } = result;
 
                 if (success) {
@@ -117,9 +120,10 @@ const Login: React.FC<Props> = ({ navigation }) => {
     const handleSignIn = async () => {
         setLoginDisabled(true);
         let isUserAuthenticated = await signInWithGoogle();
-        if (isUserAuthenticated) {
-            checkBiometricAvailability();
-        }
+        console.log("LOGGER IS AUTH: ", isUserAuthenticated);
+        // if (isUserAuthenticated) {
+        //     checkBiometricAvailability();
+        // }
     }
 
     return (

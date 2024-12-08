@@ -27,7 +27,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [cardData, setCardData] = useState<Card[]>([]);
   const [isCardPersonal, setIsCardPersonal] = useState('GRP');
   const [searchQuery, setSearchQuery] = useState('');
-
+  const [loadingScreen, setLoadingScreen] = useState('Loading cards');
 
   const [card, setCard] = useState<Card>({
     ownerName: '',
@@ -153,7 +153,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const onValueChange = reference.on('value', (snapshot) => {
       const data = snapshot.val(); // Get the data from snapshot
-
+      console.log("Logger: ",data);
       if (data) {
         let cardList: Card[] = [];
         Object.keys(data).forEach(eachkey => {
@@ -165,6 +165,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       } else {
         setCardData([]);
       }
+      setLoadingScreen("No cards found.");
     });
 
     //return () => reference.off('value', onValueChange);
@@ -374,7 +375,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
                 label="Card name"
                 placeholder="Type/name of card"
-                defaultValue={card.cvv}
+                defaultValue={card.name}
                 onChangeText={text => setCard({ ...card, name: text })}
                 mode="outlined"
                 onBlur={() => handleBlur('name')}
@@ -418,9 +419,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchBar}
-          inputStyle={{color:'white'}}
+          inputStyle={{ color: 'white' }}
           iconColor='white'
           placeholderTextColor='white'
+          selectionColor="white"
         />
 
         <FlatList
@@ -429,7 +431,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(item, index) => index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
-          ListEmptyComponent={<View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 20 }}>{'No cards found!'}</Text></View>}
+          ListEmptyComponent={<View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 20 }}>{loadingScreen}</Text></View>}
         />
         <SegmentedButtons
           value={isCardPersonal}
@@ -483,7 +485,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     padding: 20,
     marginHorizontal: 10,
-    marginVertical: 60,
+    marginBottom: 100,
+    marginTop:10,
     borderRadius: 10
   },
   modelTitle: {
