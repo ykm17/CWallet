@@ -21,20 +21,20 @@ export const BANK_DICTIONARY: BankDictionary = {
 };
 
 export const BANK_COLORS: BankDictionary = {
-    HD: "#0033A1", // HDFC Bank - Dark Blue
-    IC: "#002D62", // ICICI Bank - Navy Blue
-    AX: "#D21F3C", // Axis Bank - Red
-    HS: "#000000", // HSBC Bank - Black
-    KT: "#A82832", // Kotak Mahindra Bank - Red
-    ID: "#3F5D7D", // IDFC First Bank - Blue
-    SB: "#1B4F93", // State Bank of India - Blue
-    FD: "#005A8B", // Federal Bank - Blue
-    SW: "#C00F24", // Saraswat Bank - Red
-    IN: "#004C9B", // IndusInd Bank - Blue
-    CT: "#003D8D", // Citi Bank - Blue
-    RL: "#004C54", // RBL Bank - Green
-    BB: "#F37021", // Bank of Baroda - Orange
-    AU: "#F38C00", // AU Small Finance Bank - Orange
+    HD: "#0033A0", // HDFC Bank - Dark Blue (Primary color in logo)
+    IC: "#FF4F00", // ICICI Bank - Orange (Prominent in logo)
+    AX: "#E40046", // Axis Bank - Red (Primary color in logo)
+    HS: "#8A8D8F", // HSBC Bank - Grey (Primary color in logo)
+    KT: "#E2003F", // Kotak Mahindra Bank - Red (Core color in logo)
+    ID: "#902A2C", // IDFC First Bank - Dark Red (#902A2C is the primary color)
+    SB: "#0064A2", // State Bank of India - Blue (Iconic color)
+    FD: "#0066cc", // Federal Bank - Blue (Primary color in logo)
+    SW: "#D17F23", // Saraswat Bank - Orange (Core color in logo)
+    IN: "#832625", // IndusInd Bank - Dark Red (#832625 is the primary color)
+    CT: "#003B5C", // Citi Bank - Blue (Iconic color)
+    RL: "#9E1B32", // RBL Bank - Dark Red (RBL Bank primarily uses red)
+    BB: "#FF6A00", // Bank of Baroda - Orange (Core color)
+    AU: "#6A1B9A", // AU Small Finance Bank - Purple (Prominent color)
 };
 
 
