@@ -1,5 +1,5 @@
 import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import CustomCard from '../components/CustomCard';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,6 +13,8 @@ import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import database from '@react-native-firebase/database';
 import { formatCardNumber } from '../util/Utils';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
+import { ConnectivityContext } from '../util/Connectivity';
+import EncryptedStorage from 'react-native-encrypted-storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -28,6 +30,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [isCardPersonal, setIsCardPersonal] = useState('GRP');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
+  const { isConnected } = useContext(ConnectivityContext);
 
   const [card, setCard] = useState<Card>({
     ownerName: '',
@@ -121,10 +124,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
         setCard(card);
         //setCard(card);
 
-        console.log("\n\n");
-        console.log("LOGGER 1: ", card);
-        console.log("LOGGER 1: ", isModelForUpdate);
-        console.log("\n\n");
+        // console.log("\n\n");
+        // console.log("LOGGER 1: ", card);
+        // console.log("LOGGER 1: ", isModelForUpdate);
+        // console.log("\n\n");
         setModalVisible(true);
 
       } else {
@@ -151,22 +154,35 @@ const Home: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    const onValueChange = reference.on('value', (snapshot) => {
-      const data = snapshot.val(); // Get the data from snapshot
-      console.log("Logger: ",data);
-      if (data) {
-        let cardList: Card[] = [];
-        Object.keys(data).forEach(eachkey => {
-          let card: Card = decryptCardData(data[eachkey]) as Card;
+    if (isConnected) {
 
-          cardList.push({ ...card, key: eachkey });
-        });
-        setCardData(cardList);
-      } else {
-        setCardData([]);
-      }
-      setLoadingScreen("No cards found.");
-    });
+      const onValueChange = reference.on('value', (snapshot) => {
+        const data = snapshot.val(); // Get the data from snapshot
+        console.log("Logger: ", data);
+        if (data) {
+          let cardList: Card[] = [];
+          Object.keys(data).forEach(eachkey => {
+            let card: Card = decryptCardData(data[eachkey]) as Card;
+
+            cardList.push({ ...card, key: eachkey });
+          });
+          setCardData(cardList);
+          saveCardsInSecureStorage(cardList);
+        } else {
+          setCardData([]);
+        }
+        setLoadingScreen("No cards found.");
+      });
+
+
+    } else {
+      const loadCards = async () => {
+        const storedCards = await getCardsFromSecureStorage();
+        setCardData(storedCards);
+      };
+      loadCards();
+
+    }
 
     //return () => reference.off('value', onValueChange);
   }, []);
@@ -260,6 +276,51 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const handleBlur = (field: keyof Card) => {
     setTouched((prevState) => ({ ...prevState, [field]: true }));
   };
+
+  const saveCardsInSecureStorage = async (cards: Card[]) => {
+    try {
+      const jsonValue = JSON.stringify(cards); // Convert array to JSON string
+      await EncryptedStorage.setItem('cards', jsonValue);
+      console.log('Cards saved successfully');
+    } catch (e) {
+      console.error('Failed to save cards', e);
+    }
+  };
+
+  const getCardsFromSecureStorage = async (): Promise<Card[]> => {
+    try {
+      const jsonValue = await EncryptedStorage.getItem('cards');
+      if (jsonValue) {
+        try {
+          const parsedData: unknown = JSON.parse(jsonValue);
+          if (Array.isArray(parsedData)) {
+            const cards = parsedData as Card[]; // Cast to Card[]
+            console.log('Cards retrieved successfully:', cards);
+            return cards;
+          } else {
+            console.warn('Data retrieved is not in expected format:', parsedData);
+          }
+        } catch (parseError) {
+          console.error('Error parsing JSON data:', parseError);
+        }
+      } else {
+        console.info('No cards found in secure storage.');
+      }
+    } catch (e) {
+      console.error('Failed to fetch cards from secure storage:', e);
+    } finally {
+      setLoadingScreen("No cards found.");
+    }
+    // Return an empty array as a fallback
+    return [];
+  };
+
+
+
+  useEffect(() => {
+    console.log("-------> Logger: ", isConnected ? 'Online' : 'Offline');
+  }, []);
+
 
   return (
     <SafeAreaView style={styles.mainContainer}>
@@ -453,6 +514,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
           style={{ marginVertical: 10, marginHorizontal: 10 }}
         />
         <FAB
+          visible={isConnected}
           icon="plus"
           style={styles.fab}
           color="white"
@@ -486,7 +548,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 10,
     marginBottom: 100,
-    marginTop:10,
+    marginTop: 10,
     borderRadius: 10
   },
   modelTitle: {

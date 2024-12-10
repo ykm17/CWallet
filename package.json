@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@react-native-clipboard/clipboard": "^1.14.2",
+    "@react-native-community/netinfo": "^11.4.1",
     "@react-native-firebase/app": "^21.0.0",
     "@react-native-firebase/auth": "^21.0.0",
     "@react-native-firebase/database": "^21.0.0",
@@ -22,6 +23,7 @@
     "react": "18.3.1",
     "react-native": "0.75.4",
     "react-native-biometrics": "^3.0.1",
+    "react-native-encrypted-storage": "^4.0.3",
     "react-native-get-random-values": "^1.11.0",
     "react-native-paper": "^5.12.5",
     "react-native-prevent-screenshot-ios-android": "^1.1.0",

@@ -1,5 +1,5 @@
 import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native'
-import React from 'react'
+import React, { useContext } from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { removeSpaceFromString } from '../util/Utils'
@@ -7,6 +7,7 @@ import { BANK_COLORS, BANK_DICTIONARY, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper'
 import database from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
+import { ConnectivityContext } from '../util/Connectivity'
 
 interface CardProps {
   cardDetails: Card,
@@ -28,6 +29,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
   const showDeletePopupDialog = () => setIsDeletePopupVisible(true);
 
   const hideDeletePopupDialog = () => setIsDeletePopupVisible(false);
+  const isConnected = useContext(ConnectivityContext).isConnected;
 
   const deleteCard = () => {
     reference.child(cardDetails.key).remove();
@@ -68,7 +70,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
           </View>
 
           {
-            cardDetails.email === auth().currentUser?.email &&
+            isConnected && cardDetails.email === auth().currentUser?.email &&
             <TouchableOpacity style={{ justifyContent: 'center', alignItems: 'center' }} onPress={() => showDeletePopupDialog()}>
               <Text style={styles.heading_1}>DELETE</Text>
               <Icon
@@ -87,7 +89,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
           </View>
           <View>
             <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
-            <Text style={[styles.subheading_2,{marginBottom:5}]}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
+            <Text style={[styles.subheading_2, { marginBottom: 5 }]}>{BANK_DICTIONARY[cardDetails.bankName]}</Text>
             <View style={styles.subheading_3}><Text style={styles.highlighted_text}>{cardDetails.name}</Text></View>
           </View>
 

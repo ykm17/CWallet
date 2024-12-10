@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native'
-import React from 'react'
+import React, { useContext } from 'react'
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App'
 
@@ -8,6 +8,8 @@ import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useEffect, useState } from 'react';
 import { WEB_CLIENT_ID } from '../constants/Constants';
 import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
+import { ConnectivityContext } from '../util/Connectivity';
+import { Snackbar } from 'react-native-paper';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -15,12 +17,19 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
     const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
     const [loginDisabled, setLoginDisabled] = useState(false);
+    const isConnected = useContext(ConnectivityContext).isConnected;
+    const [visible, setVisible] = React.useState(false);
 
+    const onDismissSnackBar = () => setVisible(false);
     useEffect(() => {
         GoogleSignin.configure({
             webClientId: WEB_CLIENT_ID,  // from Firebase Console
         });
     }, []);
+
+    useEffect(() => {
+        setVisible(!isConnected);
+    }, [isConnected]);
 
     // Check if the user is already signed in
     useEffect(() => {
@@ -75,7 +84,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         rnBiometrics.simplePrompt({ promptMessage: 'Authenticate' })
             .then((result) => {
 
-        console.log("\n\nYASH 2\n\n",result);
+                console.log("\n\nYASH 2\n\n", result);
                 const { success } = result;
 
                 if (success) {
@@ -134,7 +143,21 @@ const Login: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.title}>CWallet</Text>
 
             <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
-            <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loginDisabled}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
+
+            <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loginDisabled || !isConnected}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
+
+            <Snackbar
+                visible={visible}
+                onDismiss={onDismissSnackBar}
+                action={{
+                    label: 'Close',
+                    onPress: () => {
+                        setVisible(false);
+                    },
+                }}
+            >
+                Internet not available, please try later!
+            </Snackbar>
         </View>
     )
 }
@@ -152,7 +175,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: 'black',
         padding: 16,
-        borderRadius: 30,
+        borderRadius: 20,
     },
     buttonText: {
         color: '#ffffff'

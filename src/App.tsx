@@ -1,10 +1,12 @@
 import { StyleSheet, View, Text, SafeAreaView, Touchable, TouchableOpacity, Platform } from 'react-native'
-import React, { useEffect } from 'react'
+import React, { useContext, useEffect } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Home from './screens/Home';
 import Login from './screens/Login';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
+import { ConnectivityProvider } from './util/Connectivity';
+import { ConnectivityContext } from './util/Connectivity';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -31,27 +33,28 @@ const App = () => {
     };
   }, []);
   return (
-
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        <Stack.Screen name="Home" component={Home} options={{
-          headerLeft: () => <></>,
-          headerTitleAlign: 'center',
-          statusBarColor: 'white',
-          statusBarStyle: 'dark'
-        }} />
-        <Stack.Screen name="Login" component={Login} options={{
-          // title: 'CWallet',
-          // headerTitleAlign:'center',
-          // headerTransparent: true,
-          // headerTintColor: '#000000',
-          // headerTitleStyle:{
-          //   fontSize:20
-          // }
-          headerShown: false
-        }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <ConnectivityProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login">
+          <Stack.Screen name="Home" component={Home} options={{
+            headerLeft: () => (<Text style={{ color: 'black' }}>{useContext(ConnectivityContext).isConnected ? 'Online' : 'Offline'}</Text>),
+            headerTitleAlign: 'center',
+            statusBarColor: 'white',
+            statusBarStyle: 'dark'
+          }} />
+          <Stack.Screen name="Login" component={Login} options={{
+            // title: 'CWallet',
+            // headerTitleAlign:'center',
+            // headerTransparent: true,
+            // headerTintColor: '#000000',
+            // headerTitleStyle:{
+            //   fontSize:20
+            // }
+            headerShown: false
+          }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ConnectivityProvider>
   )
 }
 
