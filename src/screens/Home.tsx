@@ -122,20 +122,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
       if (auth().currentUser?.email === card.email) {
         isModelForUpdate.current = true;
         setCard(card);
-        //setCard(card);
-
-        // console.log("\n\n");
-        // console.log("LOGGER 1: ", card);
-        // console.log("LOGGER 1: ", isModelForUpdate);
-        // console.log("\n\n");
         setModalVisible(true);
-
       } else {
         //todo:
       }
     } else {
       setModalVisible(true);
-      console.log("LOGGER 2");
     }
   }
   const hideModal = () => {
@@ -154,36 +146,42 @@ const Home: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    if (isConnected) {
+    try {
+      if (isConnected) {
+        const onValueChange = reference.on('value', (snapshot) => {
+          const data = snapshot.val(); // Get the data from snapshot
+          console.log("Logger: ", data);
+          if (data) {
+            let cardList: Card[] = [];
+            Object.keys(data).forEach(eachkey => {
+              let card: Card = decryptCardData(data[eachkey]) as Card;
+              if (card) {
+                cardList.push({ ...card, key: eachkey });
+              }
+            });
+            setCardData(cardList);
+            if (cardList.length > 0) {
+              saveCardsInSecureStorage(cardList);
+            }
+          } else {
+            setCardData([]);
+          }
+          setLoadingScreen("No cards found.");
+        });
 
-      const onValueChange = reference.on('value', (snapshot) => {
-        const data = snapshot.val(); // Get the data from snapshot
-        console.log("Logger: ", data);
-        if (data) {
-          let cardList: Card[] = [];
-          Object.keys(data).forEach(eachkey => {
-            let card: Card = decryptCardData(data[eachkey]) as Card;
 
-            cardList.push({ ...card, key: eachkey });
-          });
-          setCardData(cardList);
-          saveCardsInSecureStorage(cardList);
-        } else {
-          setCardData([]);
-        }
-        setLoadingScreen("No cards found.");
-      });
+      } else {
+        const loadCards = async () => {
+          const storedCards = await getCardsFromSecureStorage();
+          setCardData(storedCards);
+        };
+        loadCards();
 
-
-    } else {
-      const loadCards = async () => {
-        const storedCards = await getCardsFromSecureStorage();
-        setCardData(storedCards);
-      };
-      loadCards();
-
+      }
+    } catch (_exception) {
+      setLoadingScreen("No cards found.");
+      console.log("Some error occured");
     }
-
     //return () => reference.off('value', onValueChange);
   }, []);
 
@@ -202,7 +200,6 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   const validateForm = () => {
-    console.log("LOGGER 3: ", card);
 
     let validationErrors: Card = {
       ownerName: '',
@@ -230,7 +227,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
     if (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) {
       validationErrors.month = "Card month is empty or invalid";
     }
-    if (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2) {
+    if (isEmpty(card.year) || Number(card.year) < new Date().getFullYear() % 100 || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2 ) {
       validationErrors.year = "Card year is empty or invalid";
     }
     if (isEmpty(card.cvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(card.cvv) || card.cvv.length !== 3) {
@@ -248,28 +245,33 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleSubmit = () => {
-    if (isFormValid) {
+    try {
+      if (isFormValid) {
 
-      // Form is valid, perform the submission logic
-      console.log('Form submitted successfully! ');
+        // Form is valid, perform the submission logic
+        console.log('Form submitted successfully! ');
 
-      if (isModelForUpdate.current) {
-        reference.child(card.key).set(encryptCardData(card));
-        isModelForUpdate.current = false;
-      } else {
-        const userEmail = auth().currentUser?.email;
-        if (userEmail) {
-          reference.push(encryptCardData({ ...card, email: userEmail }));
+        if (isModelForUpdate.current) {
+          reference.child(card.key).set(encryptCardData(card));
+          isModelForUpdate.current = false;
         } else {
-          console.log("Error");
+          const userEmail = auth().currentUser?.email;
+          if (userEmail) {
+            reference.push(encryptCardData({ ...card, email: userEmail }));
+          } else {
+            console.log("Error");
+          }
         }
+        setIsCardPersonal(card.isPersonal ? 'PRL' : 'GRP');
+        hideModal();
+        resetCardData();
+      } else {
+        // Form is invalid, display error messages
+        console.log('Form has errors. Please correct them.');
       }
-
-      hideModal();
-      resetCardData();
-    } else {
-      // Form is invalid, display error messages
-      console.log('Form has errors. Please correct them.');
+    } catch (_exception) {
+      setLoadingScreen("No cards found.");
+      console.log("Some error occured");
     }
   };
 
@@ -314,13 +316,6 @@ const Home: React.FC<Props> = ({ navigation }) => {
     // Return an empty array as a fallback
     return [];
   };
-
-
-
-  useEffect(() => {
-    console.log("-------> Logger: ", isConnected ? 'Online' : 'Offline');
-  }, []);
-
 
   return (
     <SafeAreaView style={styles.mainContainer}>
@@ -410,7 +405,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
               />
               {
-                touched.year && (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2) &&
+                touched.year && (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || Number(card.year) < new Date().getFullYear() % 100 || card.year.length !== 2) &&
                 <HelperText type="error">
                   {errors.year}
                 </HelperText>

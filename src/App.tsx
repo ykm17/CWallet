@@ -7,6 +7,7 @@ import Login from './screens/Login';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
 import { ConnectivityContext } from './util/Connectivity';
+import { Icon } from 'react-native-paper';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -37,7 +38,16 @@ const App = () => {
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Login">
           <Stack.Screen name="Home" component={Home} options={{
-            headerLeft: () => (<Text style={{ color: 'black' }}>{useContext(ConnectivityContext).isConnected ? 'Online' : 'Offline'}</Text>),
+            headerLeft: () => (
+              <>
+                <Icon
+                  source="circle-medium"
+                  color={useContext(ConnectivityContext).isConnected ? "green" : "red"}
+                  size={20}
+                />
+                <Text style={{ color: 'black' }}>{useContext(ConnectivityContext).isConnected ? 'Online' : 'Offline'}</Text>
+              </>
+            ),
             headerTitleAlign: 'center',
             statusBarColor: 'white',
             statusBarStyle: 'dark'

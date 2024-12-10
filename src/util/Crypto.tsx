@@ -2,9 +2,10 @@
 import 'react-native-get-random-values';
 import CryptoJS from 'crypto-js';
 import { Card } from '../types/Types';
+import { CARD_ENCRYPTION_SECRET_KEY } from '@env';
 
 // Define the secret key
-const SECRET_KEY = 'yash';
+const SECRET_KEY = CARD_ENCRYPTION_SECRET_KEY;
 
 // Encrypt function
 export const encryptCardData = (cardData: Card): string => {
@@ -14,16 +15,16 @@ export const encryptCardData = (cardData: Card): string => {
 
         // Encrypt the JSON string
         const encrypted = CryptoJS.AES.encrypt(cardDataString, SECRET_KEY).toString();
-
+        
         return encrypted; // Return encrypted data as a string
     } catch (error) {
         console.error('Error encrypting card data:', error);
-        throw new Error('Encryption failed');
     }
+    return "";
 };
 
 // Decrypt function
-export const decryptCardData = (encryptedData: string): Card => {
+export const decryptCardData = (encryptedData: string): Card | null => {
     try {
         // Decrypt the string
         const bytes = CryptoJS.AES.decrypt(encryptedData, SECRET_KEY);
@@ -37,6 +38,6 @@ export const decryptCardData = (encryptedData: string): Card => {
         return cardData; // Return the decrypted card data
     } catch (error) {
         console.error('Error decrypting card data:', error);
-        throw new Error('Decryption failed');
     }
+    return null
 };
