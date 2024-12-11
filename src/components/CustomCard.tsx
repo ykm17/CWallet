@@ -2,9 +2,9 @@ import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 're
 import React, { useContext } from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { removeSpaceFromString } from '../util/Utils'
+import { convertLongNumberToText, removeSpaceFromString } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, ENV } from '../constants/Constants'
-import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper'
+import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
 import database from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
@@ -42,14 +42,20 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
 
       <View style={[styles.container, { backgroundColor: BANK_COLORS[cardDetails.bankName] }]}>
         <View style={styles.spaceContainer}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.heading_1}>{'Card Owner'}</Text>
-            <Text style={styles.subheading_1}>{cardDetails.ownerName} {'(' + cardDetails.limit + ')'}</Text>
+            <View style={{ flexGrow: 1, flexDirection: 'row' }}>
+              <Text style={[styles.subheading_1, { marginRight: 10 }]}>{cardDetails.ownerName}
+              </Text>
+              <Tooltip title={`Limit: ${convertLongNumberToText(Number(cardDetails.limit))}`} enterTouchDelay={0}>
+                <Icon
+                  source="information"
+                  color="white"
+                  size={20}
+                />
+              </Tooltip>
+            </View>
           </View>
-          {/* <View>
-          <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>{cardDetails.name}</Text>
-          <Text style={styles.subheading_1}>{cardDetails.limit}</Text>
-        </View> */}
           <TouchableWithoutFeedback onLongPress={copyCardDetialsToClipboard}>
             <View style={{ alignSelf: 'center' }}>
               <Icon
@@ -144,7 +150,8 @@ const styles = StyleSheet.create({
   spaceContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6
+    marginBottom: 6,
+    flex: 1
   },
   cardNumberSection: {
     marginBottom: 0,
