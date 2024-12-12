@@ -12,12 +12,12 @@ export const removeSpaceFromString = (inputString: string): string => {
 
 export const convertLongNumberToText = (num: number) => {
     if (num >= 10000000) {
-        return `${(num / 10000000).toFixed(0)} CR`;
+        return `${(num / 10000000).toFixed(2)} CR`;
     } else if (num >= 100000) {
-        return `${(num / 100000).toFixed(0)} L`;
+        return `${(num / 100000).toFixed(2)} L`;
     } else if (num >= 1000) {
-        return `${(num / 1000).toFixed(0)} K`;
+        return `${(num / 1000).toFixed(1)} K`;
     } else {
-        return `${num} RS`; // Append "₹" for numbers less than 1000
+        return `${num} RS`;
     }
 }
