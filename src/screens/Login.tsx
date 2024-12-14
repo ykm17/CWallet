@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native'
 import React, { useContext } from 'react'
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App'
@@ -6,15 +6,17 @@ import { RootStackParamList } from '../App'
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useEffect, useState } from 'react';
-import { WEB_CLIENT_ID } from '../constants/Constants';
+import { ENV, WEB_CLIENT_ID } from '../constants/Constants';
 import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
 import { ConnectivityContext } from '../util/Connectivity';
 import { Snackbar } from 'react-native-paper';
+import database from '@react-native-firebase/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const Login: React.FC<Props> = ({ navigation }) => {
 
+    const reference = database().ref(ENV + '/accessList');
     const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
     const [loginDisabled, setLoginDisabled] = useState(false);
     const isConnected = useContext(ConnectivityContext).isConnected;
@@ -37,11 +39,36 @@ const Login: React.FC<Props> = ({ navigation }) => {
             if (currentUser) {
                 // User is signed in
                 setUser(currentUser);
+                //temporary access check.
+                const onValueChange = reference.on('value', async (snapshot) => {
+                    const data = snapshot.val(); // Get the data from snapshot
+                    console.log("Logger: ", data);
+                    if (data) {
+                        let cardList: any[] = [];
+                        Object.keys(data).forEach(eachkey => {
+                            let card = data[eachkey];
+                            cardList.push(card);
+                        });
+
+                        console.log("Logger: ", cardList);
+                        if (cardList.includes(currentUser.email)) {
+                            checkBiometricAvailability();
+                        } else {
+                            setVisible(true);
+                            // Sign out from Firebase
+                            await auth().signOut();
+                            // Sign out from Google
+                            await GoogleSignin.signOut();
+                            setLoginDisabled(false);
+                        }
+
+                    }
+                });
                 //check biometric
-                checkBiometricAvailability();
                 console.log('User is signed in:', currentUser);
             } else {
                 // No user is signed in
+                setLoginDisabled(false);
                 console.log('No user is signed in');
                 setUser(null);
             }
@@ -130,9 +157,9 @@ const Login: React.FC<Props> = ({ navigation }) => {
         setLoginDisabled(true);
         let isUserAuthenticated = await signInWithGoogle();
         console.log("LOGGER IS AUTH: ", isUserAuthenticated);
-        // if (isUserAuthenticated) {
-        //     checkBiometricAvailability();
-        // }
+        if (!isUserAuthenticated) {
+            setLoginDisabled(false);
+        }
     }
 
     return (
@@ -156,7 +183,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
                     },
                 }}
             >
-                Internet not available, please try later!
+                {isConnected ? "Access Denied." : "Internet not available, please try later!"}
             </Snackbar>
         </View>
     )
