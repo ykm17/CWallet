@@ -73,3 +73,9 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# npm package lock
+package-lock.json
+
+# Yarn lock file
+yarn.lock
