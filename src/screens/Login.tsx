@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, Platform } from 'react-native'
 import React, { useContext } from 'react'
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App'
@@ -11,14 +11,17 @@ import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
 import { ConnectivityContext } from '../util/Connectivity';
 import { Snackbar } from 'react-native-paper';
 import database from '@react-native-firebase/database';
+import appleAuth from '@invertase/react-native-apple-authentication';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const Login: React.FC<Props> = ({ navigation }) => {
 
     const reference = database().ref(ENV + '/accessList');
-    const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
-    const [loginDisabled, setLoginDisabled] = useState(false);
+    const [googleUser, setGoogleUser] = useState<FirebaseAuthTypes.User | null>(null);
+    const [googleloginDisabled, setGoogleLoginDisabled] = useState(false);
+    const [appleUser, setAppleUser] = useState<FirebaseAuthTypes.User | null>(null);
+    const [appleloginDisabled, setAppleLoginDisabled] = useState(false);
     const isConnected = useContext(ConnectivityContext).isConnected;
     const [visible, setVisible] = React.useState(false);
 
@@ -38,7 +41,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         const unsubscribe = auth().onAuthStateChanged((currentUser) => {
             if (currentUser) {
                 // User is signed in
-                setUser(currentUser);
+                setGoogleUser(currentUser);
                 //temporary access check.
                 const onValueChange = reference.on('value', async (snapshot) => {
                     const data = snapshot.val(); // Get the data from snapshot
@@ -59,7 +62,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
                             await auth().signOut();
                             // Sign out from Google
                             await GoogleSignin.signOut();
-                            setLoginDisabled(false);
+                            setGoogleLoginDisabled(false);
                         }
 
                     }
@@ -68,9 +71,9 @@ const Login: React.FC<Props> = ({ navigation }) => {
                 console.log('User is signed in:', currentUser);
             } else {
                 // No user is signed in
-                setLoginDisabled(false);
+                setGoogleLoginDisabled(false);
                 console.log('No user is signed in');
-                setUser(null);
+                setGoogleUser(null);
             }
         });
 
@@ -153,15 +156,60 @@ const Login: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    const handleSignIn = async () => {
-        setLoginDisabled(true);
+    const handleGoogleSignIn = async () => {
+        setGoogleLoginDisabled(true);
         let isUserAuthenticated = await signInWithGoogle();
-        console.log("LOGGER IS AUTH: ", isUserAuthenticated);
+        console.log("LOGGER IS AUTH GOOGLE: ", isUserAuthenticated);
         if (!isUserAuthenticated) {
-            setLoginDisabled(false);
+            setGoogleLoginDisabled(false);
         }
     }
 
+    // const handleAppleSignIn = async () => {
+    //     setAppleLoginDisabled(true);
+    //     let isUserAuthenticated = ;
+    //     console.log("LOGGER IS APPLE AUTH: ", isUserAuthenticated);
+    //     if (!isUserAuthenticated) {
+    //         setAppleLoginDisabled(false);
+    //     }
+    // }
+
+
+    const handleAppleSignIn = async () => {
+        try {
+          // Ensure Apple Authentication is available
+          if (!appleAuth.isSupported) {
+            Alert.alert('Apple Sign-In is not supported on this device');
+            return;
+          }
+    
+          // Perform Apple sign-in request
+          const appleAuthRequestResponse = await appleAuth.performRequest({
+            requestedOperation: appleAuth.Operation.LOGIN,
+            requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+          });
+    
+          const { identityToken, nonce } = appleAuthRequestResponse;
+    
+          if (!identityToken) {
+            throw new Error('Apple Sign-In failed - no identity token returned');
+          }
+    
+          // Sign in with Firebase
+          const appleCredential = auth.AppleAuthProvider.credential(
+            identityToken,
+            nonce
+          );
+    
+          // Use Firebase to authenticate
+          const userCredential = await auth().signInWithCredential(appleCredential);
+    
+          console.log('User signed in:', userCredential.user);
+          Alert.alert('User signed in successfully!');
+        } catch (error) {
+            console.error('Sign-In Error:', error);
+        }
+      };
     return (
         <View style={styles.container}>
             <View style={styles.imageContainer}>
@@ -171,8 +219,11 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
             <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
 
-            <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loginDisabled || !isConnected}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
-
+            <TouchableOpacity style={styles.button} onPress={handleGoogleSignIn} disabled={googleloginDisabled || !isConnected}><Text style={styles.buttonText}>Google Login</Text></TouchableOpacity>
+            {
+                Platform.OS === 'ios' &&
+                <TouchableOpacity style={styles.button} onPress={handleAppleSignIn} disabled={googleloginDisabled || !isConnected}><Text style={styles.buttonText}>Apple Login</Text></TouchableOpacity>
+            }
             <Snackbar
                 visible={visible}
                 onDismiss={onDismissSnackBar}
