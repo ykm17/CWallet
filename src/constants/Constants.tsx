@@ -38,5 +38,5 @@ export const BANK_COLORS: BankDictionary = {
 };
 
 
-export const ENV: string = 'testing'; //'production';
+export const ENV: string = 'production'; //'production' Or 'testing';
 
