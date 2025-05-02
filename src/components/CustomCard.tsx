@@ -5,7 +5,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, removeSpaceFromString } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
-import database from '@react-native-firebase/database';
+import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
 
@@ -15,26 +15,32 @@ interface CardProps {
 }
 
 const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
-  const reference = database().ref(ENV + '/cards');
-
-  const copyNumberToClipboard = () => {
-    Clipboard.setString(removeSpaceFromString(cardDetails.number)); // Copy the text to clipboard
-  };
-
-  const copyCardDetialsToClipboard = () => {
-    Clipboard.setString(`Bank Name: ${BANK_DICTIONARY[cardDetails.bankName]}\nName: ${cardDetails.ownerName}\nCard No: ${cardDetails.number}\nExp: ${cardDetails.month}/${cardDetails.year}\nCvv: ${cardDetails.cvv}`); // Copy the text to clipboard
-  };
-  const [isDeletePopupVisible, setIsDeletePopupVisible] = React.useState(false);
-
-  const showDeletePopupDialog = () => setIsDeletePopupVisible(true);
-
-  const hideDeletePopupDialog = () => setIsDeletePopupVisible(false);
+  const [visible, setVisible] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
   const isConnected = useContext(ConnectivityContext).isConnected;
+  const cardsCollection = firestore().collection('cards');
 
-  const deleteCard = () => {
-    reference.child(cardDetails.key).remove();
-    hideDeletePopupDialog();
-  }
+  const showDialog = () => setVisible(true);
+  const hideDialog = () => setVisible(false);
+
+  const copyToClipboard = (text: string) => {
+    Clipboard.setString(text);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+  };
+
+  const handleDelete = async () => {
+    try {
+      if (isConnected) {
+        await cardsCollection.doc(cardDetails.key).delete();
+      }
+      hideDialog();
+    } catch (error) {
+      console.error('Error deleting card:', error);
+    }
+  };
 
   console.log("Logger: ", cardDetails);
   return (
@@ -56,7 +62,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
               </Tooltip>
             </View>
           </View>
-          <TouchableWithoutFeedback onLongPress={copyCardDetialsToClipboard}>
+          <TouchableWithoutFeedback onLongPress={() => copyToClipboard(`Bank Name: ${BANK_DICTIONARY[cardDetails.bankName]}\nName: ${cardDetails.ownerName}\nCard No: ${cardDetails.number}\nExp: ${cardDetails.month}/${cardDetails.year}\nCvv: ${cardDetails.cvv}`)}>
             <View style={{ alignSelf: 'center' }}>
               <Icon
                 source="credit-card-chip"
@@ -70,14 +76,14 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
         <View style={[styles.spaceContainer]}>
           <View style={styles.cardNumberSection}>
             <Text style={styles.heading_1}>CARD NUMBER</Text>
-            <TouchableWithoutFeedback onLongPress={copyNumberToClipboard}>
+            <TouchableWithoutFeedback onLongPress={() => copyToClipboard(cardDetails.number)}>
               <Text style={styles.subheading_2}>{cardDetails.number}</Text>
             </TouchableWithoutFeedback>
           </View>
 
           {
             isConnected && cardDetails.email === auth().currentUser?.email &&
-            <TouchableOpacity style={{ justifyContent: 'center', alignItems: 'center' }} onPress={() => showDeletePopupDialog()}>
+            <TouchableOpacity style={{ justifyContent: 'center', alignItems: 'center' }} onPress={showDialog}>
               <Text style={styles.heading_1}>DELETE</Text>
               <Icon
                 source="delete-empty"
@@ -101,7 +107,7 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
 
         </View>
         <Portal>
-          <Dialog visible={isDeletePopupVisible} onDismiss={hideDeletePopupDialog}>
+          <Dialog visible={visible} onDismiss={hideDialog}>
             <Dialog.Icon icon="file-alert" />
             <Dialog.Title>Confirm deletion</Dialog.Title>
 
@@ -109,8 +115,8 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
               <Text variant="bodyMedium">{`${cardDetails.number}\n${BANK_DICTIONARY[cardDetails.bankName]}\n${cardDetails.ownerName}`}</Text>
             </Dialog.Content>
             <Dialog.Actions>
-              <Button onPress={() => deleteCard()}>Delete</Button>
-              <Button onPress={() => hideDeletePopupDialog()}>Cancel</Button>
+              <Button onPress={handleDelete}>Delete</Button>
+              <Button onPress={hideDialog}>Cancel</Button>
             </Dialog.Actions>
           </Dialog>
         </Portal>

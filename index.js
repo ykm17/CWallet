@@ -6,7 +6,11 @@ import { AppRegistry } from 'react-native';
 import App from './src/App';
 import { name as appName } from './app.json';
 import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
+import { LogBox } from 'react-native';
 
+LogBox.ignoreLogs([
+  'This method is deprecated',
+]);
 export default function Main() {
   const customTheme = {
     ...DefaultTheme,

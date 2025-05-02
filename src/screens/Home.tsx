@@ -10,7 +10,7 @@ import { Card } from '../types/Types';
 import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
-import database from '@react-native-firebase/database';
+import firestore from '@react-native-firebase/firestore';
 import { formatCardNumber } from '../util/Utils';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
@@ -19,7 +19,7 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const Home: React.FC<Props> = ({ navigation }) => {
-  const reference = database().ref(ENV + '/cards');
+  const cardsCollection = firestore().collection('cards');
   const isModelForUpdate = useRef(false);
   const openMenu = () => setDropDownVisible(true);
   const closeMenu = () => setDropDownVisible(false);
@@ -148,41 +148,66 @@ const Home: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     try {
       if (isConnected) {
-        const onValueChange = reference.on('value', (snapshot) => {
-          const data = snapshot.val(); // Get the data from snapshot
-          console.log("Logger: ", data);
-          if (data) {
-            let cardList: Card[] = [];
-            Object.keys(data).forEach(eachkey => {
-              let card: Card = decryptCardData(data[eachkey]) as Card;
-              if (card) {
-                cardList.push({ ...card, key: eachkey });
+        console.log("Fetching cards for user:", auth().currentUser?.uid);
+        const unsubscribe = cardsCollection
+          .where('ownerId', '==', auth().currentUser?.uid)
+          .onSnapshot((snapshot) => {
+            console.log("Snapshot received:", snapshot.size, "documents");
+            const cards: Card[] = [];
+            
+            snapshot.forEach((doc) => {
+              const data = doc.data();
+              console.log("Processing document:", doc.id, data);
+              
+              if (!data.encryptedData) {
+                console.error("Document missing encryptedData:", doc.id);
+                return;
+              }
+              
+              try {
+                const decryptedData = decryptCardData(data.encryptedData);
+                if (decryptedData) {
+                  console.log("Successfully decrypted card:", decryptedData);
+                  cards.push({ ...decryptedData, key: doc.id });
+                } else {
+                  console.error("Failed to decrypt card data for document:", doc.id);
+                }
+              } catch (error) {
+                console.error("Error decrypting card data for document:", doc.id, error);
               }
             });
-            setCardData(cardList);
-            if (cardList.length > 0) {
-              saveCardsInSecureStorage(cardList);
+            
+            console.log("Total cards processed:", cards.length);
+            setCardData(cards);
+            if (cards.length > 0) {
+              saveCardsInSecureStorage(cards);
+              setLoadingScreen("");
+            } else {
+              setLoadingScreen("No cards found.");
             }
-          } else {
-            setCardData([]);
-          }
-          setLoadingScreen("No cards found.");
-        });
+          }, (error) => {
+            console.error("Error fetching cards:", error);
+            setLoadingScreen("Error loading cards.");
+          });
 
-
+        return () => {
+          console.log("Cleaning up Firestore listener");
+          unsubscribe();
+        };
       } else {
+        console.log("Offline mode: Loading cards from secure storage");
         const loadCards = async () => {
           const storedCards = await getCardsFromSecureStorage();
+          console.log("Loaded cards from secure storage:", storedCards.length);
           setCardData(storedCards);
+          setLoadingScreen(storedCards.length === 0 ? "No cards found." : "");
         };
         loadCards();
-
       }
-    } catch (_exception) {
-      setLoadingScreen("No cards found.");
-      console.log("Some error occured");
+    } catch (error) {
+      console.error("Error in useEffect:", error);
+      setLoadingScreen("Error loading cards.");
     }
-    //return () => reference.off('value', onValueChange);
   }, []);
 
 
@@ -212,7 +237,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       limit: '',
       key: '',
       isPersonal: true,
-      email: ''
+      email: '',
     };
 
     if (isEmpty(card.ownerName)) {
@@ -244,34 +269,41 @@ const Home: React.FC<Props> = ({ navigation }) => {
     setIsFormValid(Object.values(validationErrors).every(value => value === '' || value === true));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     try {
       if (isFormValid) {
+        console.log('Form submitted successfully!');
+        card.email = auth().currentUser?.email || '';
+        console.log("Card data before encryption:", card);
+        const encryptedData = encryptCardData(card);
+        const cardData = {
+          ownerId: auth().currentUser?.uid,
+          encryptedData,
+          addedAt: firestore.FieldValue.serverTimestamp(),
+          isPersonal: card.isPersonal,
+          sharedGroupIds: []  
+        };
 
-        // Form is valid, perform the submission logic
-        console.log('Form submitted successfully! ');
+        console.log("Creating/updating card with data:", cardData);
 
         if (isModelForUpdate.current) {
-          reference.child(card.key).set(encryptCardData(card));
+          console.log("Updating existing card:", card.key);
+          await cardsCollection.doc(card.key).update(cardData);
           isModelForUpdate.current = false;
         } else {
-          const userEmail = auth().currentUser?.email;
-          if (userEmail) {
-            reference.push(encryptCardData({ ...card, email: userEmail }));
-          } else {
-            console.log("Error");
-          }
+          console.log("Creating new card");
+          await cardsCollection.add(cardData);
         }
+
         setIsCardPersonal(card.isPersonal ? 'PRL' : 'GRP');
         hideModal();
         resetCardData();
       } else {
-        // Form is invalid, display error messages
         console.log('Form has errors. Please correct them.');
       }
-    } catch (_exception) {
-      setLoadingScreen("No cards found.");
-      console.log("Some error occured");
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      setLoadingScreen("Error saving card.");
     }
   };
 
