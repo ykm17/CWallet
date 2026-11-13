@@ -1,4 +1,4 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import CustomCard from '../components/CustomCard';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -7,7 +7,7 @@ import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
-import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar } from 'react-native-paper';
+import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar, Icon } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
@@ -15,6 +15,7 @@ import { formatCardNumber } from '../util/Utils';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
 import EncryptedStorage from 'react-native-encrypted-storage';
+import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan } from '../util/NfcCardReader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -31,6 +32,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
   const { isConnected } = useContext(ConnectivityContext);
+  const [nfcScanning, setNfcScanning] = useState(false);
+  const [nfcStatusText, setNfcStatusText] = useState('');
 
   const [card, setCard] = useState<Card>({
     ownerName: '',
@@ -154,7 +157,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
             console.log("Snapshot received:", snapshot.size, "documents");
             const cards: Card[] = [];
             
-            snapshot.forEach((doc) => {
+            snapshot.forEach((doc: any) => {
               const data = doc.data();
               console.log("Processing document:", doc.id, data);
               
@@ -207,7 +210,93 @@ const Home: React.FC<Props> = ({ navigation }) => {
       console.error("Error in useEffect:", error);
       setLoadingScreen("Error loading cards.");
     }
-  }, []);
+  }, [isConnected]);
+
+  const stopNfcScan = async () => {
+    setNfcScanning(false);
+    setNfcStatusText('');
+    await cancelNfcScan();
+  };
+
+  const handleNfcScan = async () => {
+    try {
+      const supported = await isNfcSupported();
+      if (!supported) {
+        Alert.alert('NFC Not Supported', 'Your device does not support NFC card scanning.');
+        return;
+      }
+      const enabled = await isNfcEnabled();
+      if (!enabled) {
+        Alert.alert(
+          'NFC Disabled',
+          'Please enable NFC in your device settings to scan your contactless card.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => goToNfcSettings() },
+          ],
+        );
+        return;
+      }
+
+      setNfcScanning(true);
+      setNfcStatusText('Hold your card close to the back of your phone...');
+
+      const scannedData = await scanCardWithNfc();
+
+      const updated = { ...card };
+
+      if (scannedData.cardNumber) {
+        updated.number = formatCardNumber(scannedData.cardNumber);
+      }
+      if (scannedData.expiryMonth) {
+        updated.month = scannedData.expiryMonth;
+      }
+      if (scannedData.expiryYear) {
+        updated.year = scannedData.expiryYear;
+      }
+      if (scannedData.ownerName) {
+        updated.ownerName = scannedData.ownerName;
+      }
+      if (scannedData.bankName) {
+        updated.bankName = scannedData.bankName;
+      }
+      if (scannedData.cardName) {
+        updated.name = scannedData.cardName;
+      }
+
+      setCard(updated);
+      setTouched(prev => ({
+        ...prev,
+        number: true,
+        month: true,
+        year: true,
+        ownerName: true,
+        bankName: true,
+        name: true,
+      } as any));
+      setNfcScanning(false);
+      setNfcStatusText('');
+
+      const filledFields: string[] = [];
+      if (scannedData.cardNumber) filledFields.push('Card Number');
+      if (scannedData.expiryMonth && scannedData.expiryYear) filledFields.push('Expiry Date');
+      if (scannedData.bankName) filledFields.push('Bank');
+      if (scannedData.cardName) filledFields.push('Card Type');
+      if (scannedData.ownerName) filledFields.push('Owner Name');
+
+      Alert.alert(
+        'Card Scanned Successfully!',
+        `Auto-filled: ${filledFields.join(', ')}.\n\nNote: For your protection, CVV is never stored on the contactless chip — please enter your 3-digit CVV manually.`,
+      );
+    } catch (err: any) {
+      setNfcScanning(false);
+      setNfcStatusText('');
+      const msg = err?.message || 'Failed to scan card';
+      if (!msg.toLowerCase().includes('cancel')) {
+        Alert.alert('NFC Notice', msg);
+      }
+    }
+  };
 
 
   const signOutUser = async () => {
@@ -354,6 +443,17 @@ const Home: React.FC<Props> = ({ navigation }) => {
         <Portal>
           <Modal visible={modalVisible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
             <Text style={styles.modelTitle} variant="headlineMedium">{`${isModelForUpdate.current ? 'Update your' : 'Add new'} card.`}</Text>
+            {!isModelForUpdate.current && (
+              <Button
+                icon="nfc"
+                mode="contained"
+                onPress={handleNfcScan}
+                style={styles.nfcScanButton}
+                labelStyle={{ color: 'white', fontWeight: 'bold' }}
+              >
+                Scan with NFC (Tap card on phone)
+              </Button>
+            )}
             <ScrollView>
               <View style={[styles.formElements, { marginBottom: 10 }]} >
                 <Menu
@@ -376,7 +476,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               }
               <TextInput
                 label="Card owner name"
-                defaultValue={card.ownerName}
+                value={card.ownerName}
                 placeholder="Name printed on your card"
                 onChangeText={text => setCard({ ...card, ownerName: text })}
                 mode="outlined"
@@ -410,7 +510,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry month"
                 placeholder="00"
-                defaultValue={card.month}
+                value={card.month}
                 onChangeText={text => setCard({ ...card, month: text })}
                 maxLength={2}
                 keyboardType="numeric"
@@ -427,7 +527,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Expiry year"
                 placeholder="00"
-                defaultValue={card.year}
+                value={card.year}
                 onChangeText={text => setCard({ ...card, year: text })}
                 maxLength={2}
                 keyboardType="numeric"
@@ -444,7 +544,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="CVV"
                 placeholder="000"
-                defaultValue={card.cvv}
+                value={card.cvv}
                 onChangeText={text => setCard({ ...card, cvv: text })}
                 maxLength={3}
                 keyboardType="numeric"
@@ -462,7 +562,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={styles.formElements}
                 label="Card name"
                 placeholder="Type/name of card"
-                defaultValue={card.name}
+                value={card.name}
                 onChangeText={text => setCard({ ...card, name: text })}
                 mode="outlined"
                 onBlur={() => handleBlur('name')}
@@ -476,7 +576,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 label="Limit"
                 placeholder="Your credit card limit"
-                defaultValue={card.limit}
+                value={card.limit}
                 onChangeText={text => setCard({ ...card, limit: text })}
                 maxLength={12}
                 keyboardType="numeric"
@@ -498,6 +598,28 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 Submit
               </Button>
             </ScrollView>
+          </Modal>
+
+          <Modal
+            visible={nfcScanning}
+            onDismiss={stopNfcScan}
+            contentContainerStyle={styles.nfcModalContent}
+          >
+            <View style={{ alignItems: 'center', padding: 10 }}>
+              <Icon source="nfc" size={64} color="#0066cc" />
+              <Text variant="headlineSmall" style={styles.nfcModalTitle}>
+                Ready to Scan
+              </Text>
+              <Text style={styles.nfcModalDescription}>
+                Hold your contactless credit/debit card firmly near the back of your phone.
+              </Text>
+              {nfcStatusText ? (
+                <Text style={styles.nfcStatus}>{nfcStatusText}</Text>
+              ) : null}
+              <Button mode="outlined" onPress={stopNfcScan} style={{ marginTop: 24, width: '80%' }}>
+                Cancel
+              </Button>
+            </View>
           </Modal>
         </Portal>
 
@@ -604,5 +726,35 @@ const styles = StyleSheet.create({
     elevation: 2,
     backgroundColor: 'black',
     color: 'white',
-  }
+  },
+  nfcScanButton: {
+    backgroundColor: '#0066cc',
+    marginBottom: 12,
+    borderRadius: 8,
+  },
+  nfcModalContent: {
+    backgroundColor: 'white',
+    padding: 24,
+    marginHorizontal: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  nfcModalTitle: {
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+    color: 'black',
+  },
+  nfcModalDescription: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nfcStatus: {
+    marginTop: 12,
+    color: '#0066cc',
+    fontSize: 13,
+    fontWeight: '500',
+  },
 })
