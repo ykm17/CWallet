@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   },
   closeModalBtn: {
     padding: 4,
-    borderRadius: 20,
+    borderRadius: 8,
     backgroundColor: '#F3F4F6',
   },
   modelTitle: {

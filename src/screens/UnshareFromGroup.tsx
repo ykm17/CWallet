@@ -9,7 +9,7 @@ import { Card, Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { parseCardDocument } from '../services/cardService';
 import { unshareCardsFromGroup, unshareCardsFromAllGroups } from '../services/sharingService';
-import { BANK_DICTIONARY } from '../constants/Constants';
+import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UnshareFromGroup'>;
@@ -111,6 +111,11 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     return sharedIds.includes(selectedGroupId);
   };
 
+  const eligibleCards = useMemo(
+    () => ownedCards.filter((card) => isCardEligible(card)),
+    [ownedCards, selectedGroupId],
+  );
+
   const eligibleSelectedCards = useMemo(() => {
     return ownedCards.filter((card) => selectedCardIds.includes(card.key) && isCardEligible(card));
   }, [ownedCards, selectedCardIds, selectedGroupId]);
@@ -121,6 +126,14 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     setSelectedCardIds((prev) => (
       prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
     ));
+  };
+
+  const handleToggleSelectAll = () => {
+    if (eligibleSelectedCards.length === eligibleCards.length) {
+      setSelectedCardIds([]);
+    } else {
+      setSelectedCardIds(eligibleCards.map((c) => c.key));
+    }
   };
 
   const handleUnshare = async () => {
@@ -220,6 +233,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           size={22}
           color={!eligible ? '#D1D5DB' : selected ? '#111111' : '#9CA3AF'}
         />
+        <View style={[styles.bankIndicator, { backgroundColor: BANK_COLORS[item.bankName] || '#1B1B1B' }]} />
         <View style={{ flex: 1 }}>
           <View style={styles.cardTitleRow}>
             <Text
@@ -271,44 +285,91 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         {lockedGroupId && lockedGroup ? (
-          <View style={styles.destinationBanner}>
-            <Icon source="account-group" size={24} color="#111111" />
-            <View style={{ flex: 1, marginHorizontal: 8 }}>
-              <Text style={styles.destinationLabel}>Unsharing from group</Text>
-              <Text style={styles.destinationName} numberOfLines={1}>
-                {lockedGroup.name}
+          <>
+            <View style={styles.destinationBanner}>
+              <Icon source="account-group" size={24} color="#111111" />
+              <View style={{ flex: 1, marginHorizontal: 8 }}>
+                <Text style={styles.destinationLabel}>Unsharing from group</Text>
+                <Text style={styles.destinationName} numberOfLines={1}>
+                  {lockedGroup.name}
+                </Text>
+              </View>
+              <View style={styles.destinationBadge}>
+                <Text style={styles.destinationBadgeText}>{lockedGroup.memberCount} members</Text>
+              </View>
+            </View>
+
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>
+                Select cards ({eligibleSelectedCards.length} selected)
               </Text>
+              {eligibleCards.length > 0 && (
+                <TouchableOpacity onPress={handleToggleSelectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.selectAllText}>
+                    {eligibleSelectedCards.length === eligibleCards.length ? 'Deselect all' : 'Select all'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <View style={styles.destinationBadge}>
-              <Text style={styles.destinationBadgeText}>{lockedGroup.memberCount} members</Text>
-            </View>
-          </View>
-        ) : null}
-
-        <Text style={styles.sectionTitle}>
-          Select cards ({eligibleSelectedCards.length} selected)
-        </Text>
-        <FlatList
-          data={ownedCards}
-          keyExtractor={(item) => item.key}
-          renderItem={renderCard}
-          style={styles.cardList}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>You have no cards to unshare.</Text>}
-        />
-
-        {!lockedGroupId ? (
-          <View style={styles.groupsContainer}>
-            <Text style={styles.sectionTitle}>Unshare from group</Text>
             <FlatList
-              data={groupOptions}
-              keyExtractor={(item) => item.groupId}
-              renderItem={renderGroup}
-              style={styles.groupsList}
-              ListEmptyComponent={<Text style={styles.emptyText}>No groups available.</Text>}
+              data={ownedCards}
+              keyExtractor={(item) => item.key}
+              renderItem={renderCard}
+              style={styles.cardListFull}
+              contentContainerStyle={ownedCards.length === 0 ? styles.emptyContainer : { paddingBottom: 8 }}
+              ListEmptyComponent={
+                <View style={styles.emptyCardBox}>
+                  <Icon source="credit-card-check-outline" size={36} color="#9CA3AF" />
+                  <Text style={styles.emptyTitle}>No shared cards</Text>
+                  <Text style={styles.emptyText}>None of your cards are currently shared.</Text>
+                </View>
+              }
             />
+          </>
+        ) : (
+          <View style={styles.splitHalfContainer}>
+            <View style={styles.halfSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>
+                  Select cards ({eligibleSelectedCards.length} selected)
+                </Text>
+                {eligibleCards.length > 0 && (
+                  <TouchableOpacity onPress={handleToggleSelectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.selectAllText}>
+                      {eligibleSelectedCards.length === eligibleCards.length ? 'Deselect all' : 'Select all'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <FlatList
+                data={ownedCards}
+                keyExtractor={(item) => item.key}
+                renderItem={renderCard}
+                style={styles.halfList}
+                contentContainerStyle={ownedCards.length === 0 ? styles.emptyContainer : { paddingBottom: 6 }}
+                ListEmptyComponent={
+                  <View style={styles.emptyCardBox}>
+                    <Icon source="credit-card-check-outline" size={32} color="#9CA3AF" />
+                    <Text style={styles.emptyTitle}>No shared cards</Text>
+                    <Text style={styles.emptyText}>None of your cards are currently shared.</Text>
+                  </View>
+                }
+              />
+            </View>
+
+            <View style={styles.halfSection}>
+              <Text style={styles.sectionTitle}>Unshare from group</Text>
+              <FlatList
+                data={groupOptions}
+                keyExtractor={(item) => item.groupId}
+                renderItem={renderGroup}
+                style={styles.halfList}
+                contentContainerStyle={groupOptions.length === 0 ? styles.emptyContainer : { paddingBottom: 6 }}
+                ListEmptyComponent={<Text style={styles.emptyText}>No groups available.</Text>}
+              />
+            </View>
           </View>
-        ) : null}
+        )}
       </View>
 
       <View style={styles.bottomFooter}>
@@ -393,22 +454,40 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontWeight: '600',
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: 4,
+  },
   sectionTitle: {
     fontWeight: '700',
     fontSize: 14,
-    marginBottom: 8,
-    marginTop: 4,
     color: '#111111',
   },
-  cardList: {
+  selectAllText: {
+    color: '#111111',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  bankIndicator: {
+    width: 6,
+    height: 36,
+    borderRadius: 3,
+  },
+  splitHalfContainer: {
+    flex: 1,
+    gap: 12,
+  },
+  halfSection: {
     flex: 1,
   },
-  groupsContainer: {
-    maxHeight: 180,
-    marginTop: 4,
+  halfList: {
+    flex: 1,
   },
-  groupsList: {
-    maxHeight: 140,
+  cardListFull: {
+    flex: 1,
   },
   row: {
     flexDirection: 'row',
@@ -459,9 +538,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCardBox: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginTop: 8,
+  },
   emptyText: {
     color: '#6B7280',
-    padding: 12,
+    fontSize: 12,
+    marginTop: 4,
     textAlign: 'center',
   },
   bottomFooter: {

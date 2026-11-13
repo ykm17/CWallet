@@ -21,6 +21,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [accessCount, setAccessCount] = useState<number | null>(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<'cards' | 'members'>('cards');
@@ -56,6 +57,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       }
     });
     const unsubAccess = listenAccessForGroup(groupId, async (access) => {
+      setAccessCount(access.length);
       const nextCards = await fetchCardsByIds(access.map((item) => item.cardId));
       const groupNameById = groups.reduce<Record<string, string>>((acc, g) => { acc[g.groupId] = g.name; return acc; }, {});
       const enrichedCards = nextCards.map((c) => {
@@ -162,6 +164,9 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
+  const cardsCount = accessCount !== null ? accessCount : cards.length;
+  const membersCount = members.length > 0 ? members.length : (group?.memberCount || 0);
+
   return (
     <View style={styles.container}>
       <View style={styles.summaryCard}>
@@ -200,11 +205,34 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       <View style={styles.tabRow}>
-        <TouchableOpacity style={[styles.tab, tab === 'cards' && styles.tabActive]} onPress={() => setTab('cards')}>
-          <Text style={[styles.tabText, tab === 'cards' && styles.tabTextActive]}>Shared cards</Text>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'cards' && styles.tabActive]}
+          onPress={() => setTab('cards')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, tab === 'cards' && styles.tabTextActive]}>
+            Shared cards
+          </Text>
+          <View style={[styles.tabBadge, tab === 'cards' ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
+            <Text style={[styles.tabBadgeText, tab === 'cards' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive]}>
+              {cardsCount}
+            </Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, tab === 'members' && styles.tabActive]} onPress={() => setTab('members')}>
-          <Text style={[styles.tabText, tab === 'members' && styles.tabTextActive]}>Members</Text>
+
+        <TouchableOpacity
+          style={[styles.tab, tab === 'members' && styles.tabActive]}
+          onPress={() => setTab('members')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, tab === 'members' && styles.tabTextActive]}>
+            Members
+          </Text>
+          <View style={[styles.tabBadge, tab === 'members' ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
+            <Text style={[styles.tabBadgeText, tab === 'members' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive]}>
+              {membersCount}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -216,6 +244,11 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             <CustomCard
               cardDetails={item}
               showYourCardLabel={item.ownerId === uid || item.email === auth().currentUser?.email}
+              onShare={
+                item.ownerId === uid || item.email === auth().currentUser?.email
+                  ? (card) => navigation.navigate('ShareToGroup', { cardIds: [card.key] })
+                  : undefined
+              }
               onUnshare={
                 item.ownerId === uid || item.email === auth().currentUser?.email
                   ? handleUnshareCardFromGroup
@@ -226,8 +259,23 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={cards.length === 0 ? styles.emptyContainer : { paddingBottom: 24 }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Icon source="credit-card-off-outline" size={40} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No cards have been shared with this group yet.</Text>
+              <Icon source="credit-card-off-outline" size={44} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>No cards in this group yet</Text>
+              <Text style={styles.emptySubtitle}>
+                {group?.contributionPermission === 'owner_only' && !isOwner
+                  ? 'Only the group owner can share cards to this group.'
+                  : 'Share cards from your wallet so group members can access them.'}
+              </Text>
+              {(isOwner || group?.contributionPermission !== 'owner_only') && (
+                <TouchableOpacity
+                  style={styles.emptyActionButton}
+                  onPress={() => navigation.navigate('ShareToGroup', { groupId })}
+                  activeOpacity={0.8}
+                >
+                  <Icon source="share-variant" size={15} color="#FFFFFF" />
+                  <Text style={styles.emptyActionButtonText}>Share your cards</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -356,19 +404,48 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
     borderRadius: 8,
+    gap: 6,
   },
   tabActive: {
     backgroundColor: '#111111',
   },
   tabText: {
     fontWeight: '700',
+    fontSize: 13,
     color: '#4B5563',
   },
   tabTextActive: {
     color: '#FFFFFF',
+  },
+  tabBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  tabBadgeInactive: {
+    backgroundColor: '#D1D5DB',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tabBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  tabBadgeTextInactive: {
+    color: '#374151',
   },
   emptyContainer: {
     flexGrow: 1,
@@ -376,7 +453,36 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+  emptyTitle: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  emptySubtitle: {
+    marginTop: 6,
+    color: '#6B7280',
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptyActionButton: {
+    marginTop: 16,
+    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  emptyActionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
   emptyText: {
     marginTop: 8,
@@ -395,7 +501,7 @@ const styles = StyleSheet.create({
   memberAvatar: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 8,
     backgroundColor: '#111111',
     alignItems: 'center',
     justifyContent: 'center',

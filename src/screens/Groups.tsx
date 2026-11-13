@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   groupIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 10,
     backgroundColor: '#1B1B1B',
     alignItems: 'center',
     justifyContent: 'center',
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 6,
   },
   ownerBadge: {
     backgroundColor: '#111111',
@@ -168,6 +168,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 20,
-    borderRadius: 30,
+    borderRadius: 10,
   },
 });

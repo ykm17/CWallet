@@ -9,7 +9,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { Card } from '../types/Types';
-import { FAB, Text, SegmentedButtons, Searchbar, Icon } from 'react-native-paper';
+import { FAB, Text, SegmentedButtons, Searchbar, Icon, Dialog, Portal } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
@@ -33,13 +33,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [isCardPersonal, setIsCardPersonal] = useState('PRL');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [exitModalVisible, setExitModalVisible] = useState(false);
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [cardToShare, setCardToShare] = useState<Card | null>(null);
   const { isConnected } = useContext(ConnectivityContext);
   const { groups } = useUserGroups();
-  const { cards: sharedCards } = useAccessibleCards(groups, isConnected && isCardPersonal === 'GRP');
+  const { cards: sharedCards } = useAccessibleCards(groups, isConnected);
 
   const getCardEffectiveType = (card: Card): string => {
     if (card.cardType) return card.cardType.toUpperCase();
@@ -167,19 +169,16 @@ const Home: React.FC<Props> = ({ navigation }) => {
           setSelectedCardIds([]);
           return true;
         }
-        // At root Home screen with no modals or selection: confirm before exit
-        Alert.alert(
-          'Exit CWallet',
-          'Are you sure you want to exit the app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Exit',
-              style: 'destructive',
-              onPress: () => BackHandler.exitApp(),
-            },
-          ],
-        );
+        if (logoutModalVisible) {
+          setLogoutModalVisible(false);
+          return true;
+        }
+        if (exitModalVisible) {
+          setExitModalVisible(false);
+          return true;
+        }
+        // At root Home screen with no modals or selection: show custom exit dialog
+        setExitModalVisible(true);
         return true;
       };
 
@@ -189,7 +188,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       );
 
       return () => backHandler.remove();
-    }, [modalVisible, cardToShare, selectionMode]),
+    }, [modalVisible, cardToShare, selectionMode, logoutModalVisible, exitModalVisible]),
   );
 
   useEffect(() => {
@@ -227,18 +226,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   }, [isConnected]);
 
   const handleLogoutPress = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out of CWallet?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: signOutUser,
-        },
-      ],
-    );
+    setLogoutModalVisible(true);
   };
 
   const signOutUser = async () => {
@@ -339,6 +327,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
       return effectiveType === selectedTypeFilter;
     });
 
+  const handleShareCard = (card: Card) => {
+    navigation.navigate('ShareToGroup', { cardIds: [card.key] });
+  };
+
   const handleUnshareCard = (card: Card) => {
     navigation.navigate('UnshareFromGroup', { cardIds: [card.key] });
   };
@@ -385,12 +377,88 @@ const Home: React.FC<Props> = ({ navigation }) => {
           onDismiss={() => setCardToShare(null)}
         />
 
+        <Portal>
+          <Dialog
+            visible={logoutModalVisible}
+            onDismiss={() => setLogoutModalVisible(false)}
+            style={styles.confirmDialog}
+          >
+            <View style={styles.confirmDialogContent}>
+              <View style={styles.confirmHeader}>
+                <View style={[styles.confirmIconContainer, { backgroundColor: '#FEE2E2' }]}>
+                  <Icon source="logout" size={20} color="#DC2626" />
+                </View>
+                <Text style={styles.confirmDialogTitle}>Log Out</Text>
+              </View>
+              <Text style={styles.confirmDialogMessage}>
+                Are you sure you want to log out of CWallet? You will need to sign in again to access your cards.
+              </Text>
+              <View style={styles.confirmDialogActions}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => setLogoutModalVisible(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                  onPress={() => {
+                    setLogoutModalVisible(false);
+                    signOutUser();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.confirmActionText}>Log Out</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Dialog>
+
+          <Dialog
+            visible={exitModalVisible}
+            onDismiss={() => setExitModalVisible(false)}
+            style={styles.confirmDialog}
+          >
+            <View style={styles.confirmDialogContent}>
+              <View style={styles.confirmHeader}>
+                <View style={[styles.confirmIconContainer, { backgroundColor: '#F3F4F6' }]}>
+                  <Icon source="power" size={20} color="#111111" />
+                </View>
+                <Text style={styles.confirmDialogTitle}>Exit CWallet</Text>
+              </View>
+              <Text style={styles.confirmDialogMessage}>
+                Are you sure you want to exit the application?
+              </Text>
+              <View style={styles.confirmDialogActions}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => setExitModalVisible(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmActionBtn, { backgroundColor: '#111111' }]}
+                  onPress={() => {
+                    setExitModalVisible(false);
+                    BackHandler.exitApp();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.confirmActionText}>Exit App</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Dialog>
+        </Portal>
+
         <Searchbar
           placeholder="Search"
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchBar}
-          inputStyle={{ color: 'white' }}
+          inputStyle={styles.searchInput}
           iconColor="white"
           placeholderTextColor="white"
           selectionColor="white"
@@ -498,7 +566,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               cardDetails={item}
               onCardLongPress={selectionMode ? toggleCardSelection : showModal}
               onCardEdit={showModal}
-              onShare={isCardPersonal === 'PRL' ? setCardToShare : undefined}
+              onShare={isCardPersonal === 'PRL' ? handleShareCard : undefined}
               onUnshare={isCardPersonal === 'PRL' ? handleUnshareCard : undefined}
               selectionMode={selectionMode && isCardPersonal === 'PRL'}
               isSelected={selectedCardIds.includes(item.key)}
@@ -525,13 +593,32 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         {selectionMode && isCardPersonal === 'PRL' && (
           <View style={styles.selectionBar}>
-            <Text style={styles.selectionCount}>{selectedCardIds.length} selected</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={styles.selectionCount}>{selectedCardIds.length} selected</Text>
+              {cardData.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedCardIds.length === cardData.length) {
+                      setSelectedCardIds([]);
+                    } else {
+                      setSelectedCardIds(cardData.map((c) => c.key));
+                    }
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.selectAllHeaderBtn}>
+                    {selectedCardIds.length === cardData.length ? 'Clear' : 'Select all'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 style={[styles.unshareSelectedButton, selectedCardIds.length === 0 && { opacity: 0.5 }]}
                 disabled={selectedCardIds.length === 0}
                 onPress={handleUnshareSelected}
               >
+                <Icon source="share-off" size={15} color="#FFFFFF" />
                 <Text style={styles.unshareSelectedText}>Unshare</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -539,35 +626,52 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 disabled={selectedCardIds.length === 0}
                 onPress={handleShareSelected}
               >
+                <Icon source="share-variant" size={15} color="#111111" />
                 <Text style={styles.shareSelectedText}>Share</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        <SegmentedButtons
-          value={isCardPersonal}
-          onValueChange={(value) => {
-            setIsCardPersonal(value);
-            setSelectionMode(false);
-            setSelectedCardIds([]);
-          }}
-          buttons={[
-            {
-              value: 'PRL',
-              label: 'My Cards',
-              style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#E5E7EB' },
-              checkedColor: '#ffffff',
-            },
-            {
-              value: 'GRP',
-              label: 'Shared Cards',
-              style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#E5E7EB' },
-              checkedColor: '#ffffff',
-            },
-          ]}
-          style={{ marginVertical: 10, marginHorizontal: 10 }}
-        />
+        <View style={styles.bottomTabRow}>
+          <TouchableOpacity
+            style={[styles.bottomTab, isCardPersonal === 'PRL' && styles.bottomTabActive]}
+            onPress={() => {
+              setIsCardPersonal('PRL');
+              setSelectionMode(false);
+              setSelectedCardIds([]);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.bottomTabText, isCardPersonal === 'PRL' && styles.bottomTabTextActive]}>
+              My Cards
+            </Text>
+            <View style={[styles.bottomTabBadge, isCardPersonal === 'PRL' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
+              <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'PRL' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
+                {cardData.length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.bottomTab, isCardPersonal === 'GRP' && styles.bottomTabActive]}
+            onPress={() => {
+              setIsCardPersonal('GRP');
+              setSelectionMode(false);
+              setSelectedCardIds([]);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.bottomTabText, isCardPersonal === 'GRP' && styles.bottomTabTextActive]}>
+              Shared Cards
+            </Text>
+            <View style={[styles.bottomTabBadge, isCardPersonal === 'GRP' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
+              <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'GRP' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
+                {sharedCards.length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
 
         <FAB
           visible={isConnected && !selectionMode}
@@ -598,17 +702,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B1B1B',
     color: 'white',
     margin: 10,
-    borderRadius: 30,
+    borderRadius: 10,
     bottom: 80,
     right: 10,
     position: 'absolute',
   },
   searchBar: {
     marginHorizontal: 10,
-    marginTop: 15,
+    marginTop: 10,
     marginBottom: 8,
     elevation: 2,
-    backgroundColor: 'black',
+    backgroundColor: '#000000',
+    borderRadius: 8,
+    height: 40,
+    justifyContent: 'center',
+  },
+  searchInput: {
+    color: 'white',
+    fontSize: 14,
+    minHeight: 0,
+    paddingVertical: 0,
+    alignSelf: 'center',
   },
   filterChipContainer: {
     flexDirection: 'row',
@@ -622,8 +736,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#E5E7EB',
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
     gap: 4,
   },
   filterChipActive: {
@@ -655,21 +769,154 @@ const styles = StyleSheet.create({
   shareSelectedButton: {
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   shareSelectedText: {
     color: '#111111',
     fontWeight: '700',
+    fontSize: 13,
   },
   unshareSelectedButton: {
     backgroundColor: '#374151',
     borderRadius: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   unshareSelectedText: {
     color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 13,
+  },
+  selectAllHeaderBtn: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  bottomTabRow: {
+    flexDirection: 'row',
+    marginHorizontal: 12,
+    marginVertical: 10,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 4,
+  },
+  bottomTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  bottomTabActive: {
+    backgroundColor: '#000000',
+  },
+  bottomTabText: {
+    fontWeight: '700',
+    fontSize: 13,
+    color: '#4B5563',
+  },
+  bottomTabTextActive: {
+    color: '#FFFFFF',
+  },
+  bottomTabBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomTabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  bottomTabBadgeInactive: {
+    backgroundColor: '#D1D5DB',
+  },
+  bottomTabBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  bottomTabBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  bottomTabBadgeTextInactive: {
+    color: '#374151',
+  },
+  confirmDialog: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginHorizontal: 24,
+  },
+  confirmDialogContent: {
+    padding: 0,
+  },
+  confirmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  confirmIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  confirmDialogMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  confirmDialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
