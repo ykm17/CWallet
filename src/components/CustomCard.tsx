@@ -1,4 +1,4 @@
-import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, Alert } from 'react-native'
 import React, { useContext, useState } from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
@@ -40,6 +40,10 @@ const CustomCard: React.FC<CardProps> = ({
   const hideDialog = () => setVisible(false);
 
   const handleEdit = () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to edit cards.');
+      return;
+    }
     if (onCardEdit) {
       onCardEdit(cardDetails);
     } else if (onCardLongPress) {
@@ -73,6 +77,11 @@ const CustomCard: React.FC<CardProps> = ({
   };
 
   const handleDelete = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to delete cards.');
+      hideDialog();
+      return;
+    }
     try {
       if (isConnected) {
         await deleteOwnedCard(cardDetails.key);

@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button, HelperText, SegmentedButtons, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Icon, SegmentedButtons, Text, TextInput } from 'react-native-paper';
 import { RootStackParamList } from '../App';
 import { CONTRIBUTION } from '../constants/Firestore';
 import { ContributionPermission } from '../types/Types';
 import { createGroup, fetchGroup, updateGroup } from '../services/groupService';
+import { ConnectivityContext } from '../util/Connectivity';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GroupForm'>;
 
 const GroupForm: React.FC<Props> = ({ navigation, route }) => {
   const groupId = route.params?.groupId;
   const isEdit = Boolean(groupId);
+  const { isConnected } = useContext(ConnectivityContext);
   const [name, setName] = useState('');
   const [permission, setPermission] = useState<ContributionPermission>(CONTRIBUTION.OPEN);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,10 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
   }, [groupId, navigation]);
 
   const handleSave = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to create or update a group.');
+      return;
+    }
     if (!name.trim() || saving) {
       return;
     }
@@ -64,6 +70,12 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content}>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+            <Text style={styles.offlineBannerText}>You are offline. Reconnect to save or update groups.</Text>
+          </View>
+        )}
         <Text style={styles.heading}>{isEdit ? 'Update group details' : 'New group'}</Text>
         <Text style={styles.subheading}>
           Groups control who can view shared cards. They do not copy cards.
@@ -76,6 +88,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
           mode="outlined"
           placeholder="Family, Friends, Work..."
           style={styles.input}
+          editable={isConnected}
         />
         {!name.trim() && (
           <HelperText type="info">Choose a name. Duplicate names are allowed across users.</HelperText>
@@ -100,7 +113,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
           mode="contained"
           onPress={handleSave}
           loading={saving || loading}
-          disabled={!name.trim() || saving || loading}
+          disabled={!name.trim() || saving || loading || !isConnected}
           style={styles.saveButton}
           labelStyle={styles.saveLabel}
         >
@@ -120,6 +133,24 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   heading: {
     fontSize: 22,

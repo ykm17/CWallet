@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { View, StyleSheet, Alert, FlatList, TouchableOpacity, TextInput as RNTextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper';
@@ -11,12 +11,14 @@ import { fetchCardsByIds } from '../services/cardService';
 import CustomCard from '../components/CustomCard';
 import { contributionLabel } from '../services/sharingUtils';
 import { useUserGroups } from '../hooks/useUserGroups';
+import { ConnectivityContext } from '../util/Connectivity';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GroupDetails'>;
 
 const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const { groupId } = route.params;
   const uid = auth().currentUser?.uid;
+  const { isConnected } = useContext(ConnectivityContext);
   const { groups } = useUserGroups();
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -40,13 +42,30 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       headerTitleAlign: 'center',
       headerStyle: { backgroundColor: '#F4F5F7' },
       headerRight: () => isOwner ? (
-        <TouchableOpacity onPress={() => navigation.navigate('GroupForm', { groupId })}>
-          <Text style={styles.headerAction}>Edit</Text>
+        <TouchableOpacity
+          onPress={() => {
+            if (!isConnected) {
+              Alert.alert('Offline', 'You must be online to edit this group.');
+              return;
+            }
+            navigation.navigate('GroupForm', { groupId });
+          }}
+          style={[styles.headerEditBtn, !isConnected && { opacity: 0.5 }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Icon source="pencil-outline" size={15} color="#111111" />
+          <Text style={styles.headerEditText}>Edit</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
-          onPress={() => setLeaveVisible(true)}
-          style={styles.headerLeaveBtn}
+          onPress={() => {
+            if (!isConnected) {
+              Alert.alert('Offline', 'You must be online to leave this group.');
+              return;
+            }
+            setLeaveVisible(true);
+          }}
+          style={[styles.headerLeaveBtn, !isConnected && { opacity: 0.5 }]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Icon source="exit-to-app" size={15} color="#DC2626" />
@@ -54,7 +73,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
       ),
     });
-  }, [group?.name, isOwner, groupId, navigation]);
+  }, [group?.name, isOwner, groupId, navigation, isConnected]);
 
   useEffect(() => {
     const unsubGroup = listenGroup(groupId, setGroup, (error) => {
@@ -88,6 +107,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   }, [groupId, navigation, isOwner]);
 
   const handleAddMember = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to add group members.');
+      return;
+    }
     if (!memberEmail.trim()) {
       return;
     }
@@ -114,6 +137,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleRemoveMember = (member: GroupMember) => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to remove group members.');
+      return;
+    }
     Alert.alert(
       'Remove member',
       `Remove ${member.displayName || member.email} from this group? They will lose access through this group only.`,
@@ -135,10 +162,18 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleUnshareCardFromGroup = (card: Card) => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to unshare cards.');
+      return;
+    }
     navigation.navigate('UnshareFromGroup', { cardIds: [card.key], groupId });
   };
 
   const handleDeleteGroup = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to delete this group.');
+      return;
+    }
     try {
       await deleteGroup(groupId);
       setDeleteVisible(false);
@@ -149,6 +184,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleLeaveGroup = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to leave this group.');
+      return;
+    }
     try {
       setLeaving(true);
       await leaveGroup(groupId);
@@ -187,14 +226,20 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           </Text>
         </View>
         {isOwner && item.role !== 'owner' && (
-          <TouchableOpacity onPress={() => handleRemoveMember(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            onPress={() => handleRemoveMember(item)}
+            disabled={!isConnected}
+            style={!isConnected && { opacity: 0.3 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Icon source="close-circle-outline" size={20} color="#D32F2F" />
           </TouchableOpacity>
         )}
         {!isOwner && isCurrentUser && (
           <TouchableOpacity
             onPress={() => setLeaveVisible(true)}
-            style={styles.memberLeaveRowBtn}
+            disabled={!isConnected}
+            style={[styles.memberLeaveRowBtn, !isConnected && { opacity: 0.4 }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon source="exit-to-app" size={14} color="#DC2626" />
@@ -210,6 +255,12 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
+      {!isConnected && (
+        <View style={styles.offlineBanner}>
+          <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+          <Text style={styles.offlineBannerText}>You are offline. Editing group, members, and sharing are disabled.</Text>
+        </View>
+      )}
       <View style={styles.summaryCard}>
         <Text style={styles.groupTitle}>{group?.name || 'Loading...'}</Text>
         <Text style={styles.summaryMeta}>
@@ -220,10 +271,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             style={[
               styles.actionBtn,
               styles.shareBtn,
-              (!isOwner && group?.contributionPermission === 'owner_only') && styles.disabledBtn,
+              (!isConnected || (!isOwner && group?.contributionPermission === 'owner_only')) && styles.disabledBtn,
             ]}
             onPress={() => navigation.navigate('ShareToGroup', { groupId })}
-            disabled={!isOwner && group?.contributionPermission === 'owner_only'}
+            disabled={!isConnected || (!isOwner && group?.contributionPermission === 'owner_only')}
             activeOpacity={0.7}
           >
             <Icon source="share-variant" size={16} color="#FFFFFF" />
@@ -233,10 +284,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             style={[
               styles.actionBtn,
               styles.unshareBtn,
-              userCardsInGroup.length === 0 && styles.disabledBtn,
+              (!isConnected || userCardsInGroup.length === 0) && styles.disabledBtn,
             ]}
             onPress={() => navigation.navigate('UnshareFromGroup', { groupId })}
-            disabled={userCardsInGroup.length === 0}
+            disabled={!isConnected || userCardsInGroup.length === 0}
             activeOpacity={0.7}
           >
             <Icon source="share-off" size={16} color="#FFFFFF" />
@@ -309,8 +360,9 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
               </Text>
               {(isOwner || group?.contributionPermission !== 'owner_only') && (
                 <TouchableOpacity
-                  style={styles.emptyActionButton}
+                  style={[styles.emptyActionButton, !isConnected && { opacity: 0.5 }]}
                   onPress={() => navigation.navigate('ShareToGroup', { groupId })}
+                  disabled={!isConnected}
                   activeOpacity={0.8}
                 >
                   <Icon source="share-variant" size={15} color="#FFFFFF" />
@@ -337,13 +389,18 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
                   <RNTextInput
                     value={memberEmail}
                     onChangeText={setMemberEmail}
-                    placeholder="email@example.com"
+                    placeholder={isConnected ? "email@example.com" : "Connect to internet to add members"}
                     autoCapitalize="none"
                     keyboardType="email-address"
-                    style={styles.emailInput}
+                    editable={isConnected}
+                    style={[styles.emailInput, !isConnected && { opacity: 0.6 }]}
                     placeholderTextColor="#9CA3AF"
                   />
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddMember} disabled={adding}>
+                  <TouchableOpacity
+                    style={[styles.addButton, (!isConnected || adding || !memberEmail.trim()) && { opacity: 0.5 }]}
+                    onPress={handleAddMember}
+                    disabled={adding || !isConnected || !memberEmail.trim()}
+                  >
                     <Text style={styles.addButtonText}>{adding ? '...' : 'Add'}</Text>
                   </TouchableOpacity>
                 </View>
@@ -353,8 +410,9 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           ListFooterComponent={
             isOwner ? (
               <TouchableOpacity
-                style={styles.deleteButton}
+                style={[styles.deleteButton, !isConnected && { opacity: 0.5 }]}
                 onPress={() => setDeleteVisible(true)}
+                disabled={!isConnected}
                 activeOpacity={0.8}
               >
                 <Icon source="trash-can-outline" size={16} color="#DC2626" />
@@ -362,8 +420,9 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.leaveGroupButton}
+                style={[styles.leaveGroupButton, !isConnected && { opacity: 0.5 }]}
                 onPress={() => setLeaveVisible(true)}
+                disabled={!isConnected}
                 activeOpacity={0.8}
               >
                 <Icon source="exit-to-app" size={16} color="#DC2626" />
@@ -456,9 +515,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F4F5F7',
   },
-  headerAction: {
-    color: 'black',
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
     fontWeight: '600',
+    flex: 1,
+  },
+  headerEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  headerEditText: {
+    color: '#111111',
+    fontWeight: '700',
+    fontSize: 13,
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',

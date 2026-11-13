@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Dialog, FAB, Icon, Portal, Text } from 'react-native-paper';
@@ -7,12 +7,14 @@ import { Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { contributionLabel } from '../services/sharingUtils';
 import { leaveGroup } from '../services/groupService';
+import { ConnectivityContext } from '../util/Connectivity';
 import auth from '@react-native-firebase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Groups'>;
 
 const Groups: React.FC<Props> = ({ navigation }) => {
   const uid = auth().currentUser?.uid;
+  const { isConnected } = useContext(ConnectivityContext);
   const { groups, loading, error } = useUserGroups();
   const [leaveTarget, setLeaveTarget] = useState<Group | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -27,6 +29,10 @@ const Groups: React.FC<Props> = ({ navigation }) => {
 
   const handleConfirmLeaveGroup = async () => {
     if (!leaveTarget) return;
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to leave a group.');
+      return;
+    }
     try {
       setLeaving(true);
       await leaveGroup(leaveTarget.groupId);
@@ -47,6 +53,10 @@ const Groups: React.FC<Props> = ({ navigation }) => {
         onPress={() => navigation.navigate('GroupDetails', { groupId: item.groupId })}
         onLongPress={() => {
           if (!isOwner) {
+            if (!isConnected) {
+              Alert.alert('Offline', 'You must be online to leave a group.');
+              return;
+            }
             setLeaveTarget(item);
           }
         }}
@@ -74,6 +84,12 @@ const Groups: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {!isConnected && (
+        <View style={styles.offlineBanner}>
+          <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+          <Text style={styles.offlineBannerText}>You are offline. Creating or leaving groups is disabled.</Text>
+        </View>
+      )}
       <FlatList
         data={groups}
         keyExtractor={(item) => item.groupId}
@@ -100,6 +116,7 @@ const Groups: React.FC<Props> = ({ navigation }) => {
         }
       />
       <FAB
+        visible={isConnected}
         icon="plus"
         style={styles.fab}
         color="white"
@@ -153,6 +170,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F4F5F7',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   listContent: {
     padding: 12,

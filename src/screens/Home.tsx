@@ -91,6 +91,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
   });
 
   const showModal = (selectedCard?: Card) => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to add or edit cards.');
+      return;
+    }
     if (selectedCard && !isEmpty(selectedCard.bankName)) {
       if (auth().currentUser?.email === selectedCard.email) {
         setCardToEdit(selectedCard);
@@ -117,30 +121,87 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
+      headerLeft: () => (
         selectionMode ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity onPress={() => {
+          <TouchableOpacity
+            style={styles.topBarCancelBtn}
+            onPress={() => {
               setSelectionMode(false);
               setSelectedCardIds([]);
-            }}>
-              <Text style={{ color: 'black' }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon source="close" size={16} color="#374151" />
+            <Text style={styles.topBarCancelText}>Cancel</Text>
+          </TouchableOpacity>
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <TouchableOpacity onPress={() => navigation.navigate('Groups')}>
-              <Text style={{ color: 'black' }}>Groups</Text>
+          <View style={styles.topBarLeft}>
+            <View style={styles.topBarBrandBox}>
+              <Icon source="wallet" size={17} color="#FFFFFF" />
+            </View>
+            <Text style={styles.topBarBrandTitle}>CWallet</Text>
+            <View style={[styles.topBarStatusPill, isConnected ? styles.topBarStatusOnline : styles.topBarStatusOffline]}>
+              <View style={[styles.topBarStatusDot, isConnected ? styles.topBarStatusDotOnline : styles.topBarStatusDotOffline]} />
+              <Text style={[styles.topBarStatusText, isConnected ? styles.topBarStatusTextOnline : styles.topBarStatusTextOffline]}>
+                {isConnected ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+          </View>
+        )
+      ),
+      headerTitle: () => (
+        selectionMode ? (
+          <Text style={styles.topBarSelectionTitle}>
+            {selectedCardIds.length} selected
+          </Text>
+        ) : null
+      ),
+      headerRight: () => (
+        selectionMode ? (
+          <TouchableOpacity
+            style={styles.topBarSelectAllBtn}
+            onPress={() => {
+              if (selectedCardIds.length === cardData.length) {
+                setSelectedCardIds([]);
+              } else {
+                setSelectedCardIds(cardData.map((c) => c.key));
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.topBarSelectAllText}>
+              {selectedCardIds.length === cardData.length ? 'Clear' : 'Select all'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.topBarRight}>
+            <TouchableOpacity
+              style={styles.topBarGroupsBtn}
+              onPress={() => navigation.navigate('Groups')}
+              activeOpacity={0.7}
+            >
+              <Icon source="account-group" size={16} color="#111111" />
+              <Text style={styles.topBarGroupsText}>Groups</Text>
+              {groups.length > 0 && (
+                <View style={styles.topBarGroupsBadge}>
+                  <Text style={styles.topBarGroupsBadgeText}>{groups.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogoutPress}>
-              <Text style={{ color: 'black' }}>Logout</Text>
+            <TouchableOpacity
+              style={styles.topBarLogoutBtn}
+              onPress={handleLogoutPress}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Log out"
+            >
+              <Icon source="logout" size={16} color="#DC2626" />
             </TouchableOpacity>
           </View>
         )
       ),
-      title: selectionMode ? `${selectedCardIds.length} selected` : undefined,
     });
-  }, [navigation, selectionMode, selectedCardIds.length]);
+  }, [navigation, selectionMode, selectedCardIds.length, cardData.length, isConnected, groups.length]);
 
   useEffect(() => {
     // Prevent navigating back to Login screen post login
@@ -344,14 +405,26 @@ const Home: React.FC<Props> = ({ navigation }) => {
     });
 
   const handleShareCard = (card: Card) => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to share cards.');
+      return;
+    }
     navigation.navigate('ShareToGroup', { cardIds: [card.key] });
   };
 
   const handleUnshareCard = (card: Card) => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to unshare cards.');
+      return;
+    }
     navigation.navigate('UnshareFromGroup', { cardIds: [card.key] });
   };
 
   const handleUnshareSelected = () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to unshare cards.');
+      return;
+    }
     const ids = [...selectedCardIds];
     setSelectionMode(false);
     setSelectedCardIds([]);
@@ -359,6 +432,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleShareSelected = () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to share cards.');
+      return;
+    }
     const ids = [...selectedCardIds];
     setSelectionMode(false);
     setSelectedCardIds([]);
@@ -484,8 +561,16 @@ const Home: React.FC<Props> = ({ navigation }) => {
         <View style={styles.filterChipContainer}>
           {isCardPersonal === 'PRL' && (
             <TouchableOpacity
-              style={[styles.filterChip, selectionMode && styles.filterChipActive]}
+              style={[
+                styles.filterChip,
+                selectionMode && styles.filterChipActive,
+                !isConnected && { opacity: 0.5 },
+              ]}
               onPress={() => {
+                if (!isConnected) {
+                  Alert.alert('Offline', 'You must be online to select cards for sharing or unsharing.');
+                  return;
+                }
                 if (selectionMode) {
                   setSelectionMode(false);
                   setSelectedCardIds([]);
@@ -580,10 +665,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
           renderItem={({ item }) => (
             <CustomCard
               cardDetails={item}
-              onCardLongPress={selectionMode ? toggleCardSelection : showModal}
-              onCardEdit={showModal}
-              onShare={isCardPersonal === 'PRL' ? handleShareCard : undefined}
-              onUnshare={isCardPersonal === 'PRL' ? handleUnshareCard : undefined}
+              onCardLongPress={selectionMode ? toggleCardSelection : (isConnected ? showModal : undefined)}
+              onCardEdit={isConnected ? showModal : undefined}
+              onShare={isCardPersonal === 'PRL' && isConnected ? handleShareCard : undefined}
+              onUnshare={isCardPersonal === 'PRL' && isConnected ? handleUnshareCard : undefined}
               selectionMode={selectionMode && isCardPersonal === 'PRL'}
               isSelected={selectedCardIds.includes(item.key)}
               onToggleSelect={toggleCardSelection}
@@ -699,16 +784,16 @@ const Home: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
-                style={[styles.unshareSelectedButton, selectedCardIds.length === 0 && { opacity: 0.5 }]}
-                disabled={selectedCardIds.length === 0}
+                style={[styles.unshareSelectedButton, (selectedCardIds.length === 0 || !isConnected) && { opacity: 0.5 }]}
+                disabled={selectedCardIds.length === 0 || !isConnected}
                 onPress={handleUnshareSelected}
               >
                 <Icon source="share-off" size={15} color="#FFFFFF" />
                 <Text style={styles.unshareSelectedText}>Unshare</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.shareSelectedButton, selectedCardIds.length === 0 && { opacity: 0.5 }]}
-                disabled={selectedCardIds.length === 0}
+                style={[styles.shareSelectedButton, (selectedCardIds.length === 0 || !isConnected) && { opacity: 0.5 }]}
+                disabled={selectedCardIds.length === 0 || !isConnected}
                 onPress={handleShareSelected}
               >
                 <Icon source="share-variant" size={15} color="#111111" />
@@ -1056,5 +1141,141 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '600',
     fontSize: 13,
+  },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarBrandBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarBrandTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111111',
+    letterSpacing: -0.4,
+  },
+  topBarStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  topBarStatusOnline: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  topBarStatusOffline: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  topBarStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  topBarStatusDotOnline: {
+    backgroundColor: '#10B981',
+  },
+  topBarStatusDotOffline: {
+    backgroundColor: '#EF4444',
+  },
+  topBarStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  topBarStatusTextOnline: {
+    color: '#047857',
+  },
+  topBarStatusTextOffline: {
+    color: '#B91C1C',
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarGroupsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  topBarGroupsText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  topBarGroupsBadge: {
+    backgroundColor: '#111111',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarGroupsBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  topBarLogoutBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  topBarCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  topBarSelectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  topBarSelectAllBtn: {
+    backgroundColor: '#111111',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarSelectAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -1,6 +1,6 @@
-import { StyleSheet, View, Text, SafeAreaView, Touchable, TouchableOpacity, Platform } from 'react-native'
-import React, { useContext, useEffect } from 'react'
-import { NavigationContainer } from '@react-navigation/native'
+import { Platform } from 'react-native';
+import React, { useEffect } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Home from './screens/Home';
 import Login from './screens/Login';
@@ -11,8 +11,6 @@ import ShareToGroup from './screens/ShareToGroup';
 import UnshareFromGroup from './screens/UnshareFromGroup';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
-import { ConnectivityContext } from './util/Connectivity';
-import { Icon } from 'react-native-paper';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -46,46 +44,48 @@ const App = () => {
   return (
     <ConnectivityProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Login">
-          <Stack.Screen name="Home" component={Home} options={{
-            headerLeft: () => (
-              <>
-                <Icon
-                  source="circle-medium"
-                  color={useContext(ConnectivityContext).isConnected ? "green" : "red"}
-                  size={20}
-                />
-                <Text style={{ color: 'black' }}>{useContext(ConnectivityContext).isConnected ? 'Online' : 'Offline'}</Text>
-              </>
-            ),
-            headerBackVisible: false,
-            gestureEnabled: false,
-            headerTitleAlign: 'center',
+        <Stack.Navigator
+          initialRouteName="Login"
+          screenOptions={{
             headerStyle: { backgroundColor: '#F4F5F7' },
+            headerShadowVisible: false,
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: '700',
+              fontSize: 17,
+              color: '#111111',
+            },
+            headerTintColor: '#111111',
             statusBarColor: '#F4F5F7',
-            statusBarStyle: 'dark'
-          }} />
+            statusBarStyle: 'dark',
+          }}
+        >
+          <Stack.Screen
+            name="Home"
+            component={Home}
+            options={{
+              headerBackVisible: false,
+              gestureEnabled: false,
+            }}
+          />
           <Stack.Screen name="Groups" component={Groups} />
           <Stack.Screen name="GroupForm" component={GroupForm} />
           <Stack.Screen name="GroupDetails" component={GroupDetails} />
           <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
           <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
-          <Stack.Screen name="Login" component={Login} options={{
-            // title: 'CWallet',
-            // headerTitleAlign:'center',
-            // headerTransparent: true,
-            // headerTintColor: '#000000',
-            // headerTitleStyle:{
-            //   fontSize:20
-            // }
-            headerShown: false,
-            gestureEnabled: false
-          }} />
+          <Stack.Screen
+            name="Login"
+            component={Login}
+            options={{
+              headerShown: false,
+              gestureEnabled: false,
+            }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </ConnectivityProvider>
-  )
-}
+  );
+};
 
-export default App
+export default App;
 

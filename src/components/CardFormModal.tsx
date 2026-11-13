@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,6 +26,7 @@ import { Card } from '../types/Types';
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { formatCardNumber, detectCardNetwork, detectCardType } from '../util/Utils';
 import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan } from '../util/NfcCardReader';
+import { ConnectivityContext } from '../util/Connectivity';
 
 interface CardFormModalProps {
   visible: boolean;
@@ -56,6 +57,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   cardToEdit,
   onSubmit,
 }) => {
+  const { isConnected } = useContext(ConnectivityContext);
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [formKey, setFormKey] = useState(0);
@@ -136,6 +138,10 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   };
 
   const handleNfcScan = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to add or scan cards.');
+      return;
+    }
     try {
       const supported = await isNfcSupported();
       if (!supported) {
@@ -228,6 +234,10 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   }, [errors]);
 
   const handleFormSubmit = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to save or edit cards.');
+      return;
+    }
     if (!isFormValid || submitting) return;
     try {
       setSubmitting(true);
@@ -305,12 +315,20 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={true}
         >
+          {!isConnected && (
+            <View style={styles.offlineBanner}>
+              <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+              <Text style={styles.offlineBannerText}>You are offline. Adding or editing cards is disabled.</Text>
+            </View>
+          )}
+
           {!isUpdate && (
             <Button
               icon="nfc"
               mode="contained"
               onPress={handleNfcScan}
-              style={styles.nfcScanButton}
+              disabled={!isConnected}
+              style={[styles.nfcScanButton, !isConnected && { opacity: 0.5 }]}
               labelStyle={{ color: 'white', fontWeight: 'bold' }}
             >
               Scan with NFC (Tap card on phone)
@@ -599,12 +617,16 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             icon={isUpdate ? 'check-circle-outline' : 'plus-circle-outline'}
             mode="contained"
             onPress={handleFormSubmit}
-            disabled={!isFormValid || submitting}
+            disabled={!isFormValid || submitting || !isConnected}
             loading={submitting}
-            style={[styles.button, isFormValid && !submitting && styles.buttonActive]}
+            style={[styles.button, isFormValid && !submitting && isConnected && styles.buttonActive]}
             labelStyle={styles.buttonLabel}
           >
-            {isUpdate ? 'Update Card' : 'Save Card'}
+            {!isConnected
+              ? 'Offline (Cannot save)'
+              : isUpdate
+              ? 'Update Card'
+              : 'Save Card'}
           </Button>
         </ScrollView>
       </Modal>
@@ -745,6 +767,24 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   modelTitle: {
     fontSize: 20,

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Icon, Text } from 'react-native-paper';
@@ -11,6 +11,7 @@ import { parseCardDocument } from '../services/cardService';
 import { unshareCardsFromGroup, unshareCardsFromAllGroups } from '../services/sharingService';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
+import { ConnectivityContext } from '../util/Connectivity';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UnshareFromGroup'>;
 
@@ -25,6 +26,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   const uid = auth().currentUser?.uid || '';
   const initialCardIds = route.params?.cardIds || [];
   const lockedGroupId = route.params?.groupId;
+  const { isConnected } = useContext(ConnectivityContext);
   const { groups } = useUserGroups();
   const [ownedCards, setOwnedCards] = useState<Card[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
@@ -137,6 +139,10 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleUnshare = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to unshare cards from groups.');
+      return;
+    }
     if (!selectedGroupId) {
       Alert.alert('Select a group', 'Please select a group or "All groups" to unshare from.');
       return;
@@ -284,6 +290,12 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+            <Text style={styles.offlineBannerText}>You are offline. Unsharing cards from groups is disabled.</Text>
+          </View>
+        )}
         {lockedGroupId && lockedGroup ? (
           <>
             <View style={styles.destinationBanner}>
@@ -392,14 +404,16 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           mode="contained"
           onPress={handleUnshare}
           loading={saving}
-          disabled={saving || !selectedGroupId || eligibleSelectedCards.length === 0}
+          disabled={saving || !isConnected || !selectedGroupId || eligibleSelectedCards.length === 0}
           style={[
             styles.unshareButton,
-            (!selectedGroupId || eligibleSelectedCards.length === 0) && { opacity: 0.55 },
+            (!isConnected || !selectedGroupId || eligibleSelectedCards.length === 0) && { opacity: 0.55 },
           ]}
           labelStyle={{ color: '#FFFFFF', fontWeight: '700' }}
         >
-          {eligibleSelectedCards.length > 0
+          {!isConnected
+            ? 'Offline (Cannot unshare)'
+            : eligibleSelectedCards.length > 0
             ? `Unshare (${eligibleSelectedCards.length} card${eligibleSelectedCards.length === 1 ? '' : 's'})`
             : 'Unshare'}
         </Button>
@@ -419,6 +433,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 12,
     paddingTop: 8,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   destinationBanner: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Icon, Text } from 'react-native-paper';
@@ -12,6 +12,7 @@ import { shareCardsWithGroup, unshareCardFromGroup } from '../services/sharingSe
 import { canShareToGroup, contributionLabel } from '../services/sharingUtils';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
+import { ConnectivityContext } from '../util/Connectivity';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareToGroup'>;
 
@@ -19,6 +20,7 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   const uid = auth().currentUser?.uid || '';
   const initialCardIds = route.params?.cardIds || [];
   const lockedGroupId = route.params?.groupId;
+  const { isConnected } = useContext(ConnectivityContext);
   const { groups, shareableGroups } = useUserGroups();
   const [ownedCards, setOwnedCards] = useState<Card[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
@@ -92,6 +94,10 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleShare = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to share cards with groups.');
+      return;
+    }
     if (!selectedGroupId) {
       Alert.alert('Select a group', 'Please select a destination group to share with.');
       return;
@@ -170,6 +176,10 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
                   text: 'Unshare',
                   style: 'destructive',
                   onPress: async () => {
+                    if (!isConnected) {
+                      Alert.alert('Offline', 'You must be online to unshare cards.');
+                      return;
+                    }
                     try {
                       await unshareCardFromGroup(item.key, selectedGroupId!);
                       Alert.alert('Card Unshared', `Removed from ${selectedGroup?.name}.`);
@@ -248,6 +258,12 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+            <Text style={styles.offlineBannerText}>You are offline. Sharing cards with groups is disabled.</Text>
+          </View>
+        )}
         {lockedGroupId && selectedGroup ? (
           <>
             <View style={styles.destinationBanner}>
@@ -349,14 +365,16 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
           mode="contained"
           onPress={handleShare}
           loading={saving}
-          disabled={saving || !selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)}
+          disabled={saving || !isConnected || !selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)}
           style={[
             styles.shareButton,
-            (!selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)) && { opacity: 0.55 },
+            (!isConnected || !selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)) && { opacity: 0.55 },
           ]}
           labelStyle={{ color: '#FFFFFF', fontWeight: '700' }}
         >
-          {selectedGroup && selectedCardIds.length > 0 && newCardsToShare.length === 0
+          {!isConnected
+            ? 'Offline (Cannot share)'
+            : selectedGroup && selectedCardIds.length > 0 && newCardsToShare.length === 0
             ? 'Already in this group'
             : newCardsToShare.length > 0
             ? `Share (${newCardsToShare.length} new)`
@@ -378,6 +396,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 12,
     paddingTop: 8,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   destinationBanner: {
     flexDirection: 'row',

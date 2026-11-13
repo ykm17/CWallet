@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Button, Icon, Modal, Portal, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -7,6 +7,7 @@ import { useUserGroups } from '../hooks/useUserGroups';
 import { listenAccessForCard, syncCardGroupAccess } from '../services/sharingService';
 import { canShareToGroup, contributionLabel } from '../services/sharingUtils';
 import { BANK_DICTIONARY } from '../constants/Constants';
+import { ConnectivityContext } from '../util/Connectivity';
 
 interface ShareCardModalProps {
   visible: boolean;
@@ -17,6 +18,7 @@ interface ShareCardModalProps {
 
 const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismiss, onShared }) => {
   const uid = auth().currentUser?.uid || '';
+  const { isConnected } = useContext(ConnectivityContext);
   const { groups } = useUserGroups();
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [existingGroupIds, setExistingGroupIds] = useState<string[]>([]);
@@ -69,6 +71,10 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
   };
 
   const handleSave = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to update card sharing.');
+      return;
+    }
     if (!card?.key) {
       return;
     }
@@ -127,6 +133,13 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
           </TouchableOpacity>
         </View>
 
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
+            <Text style={styles.offlineBannerText}>You are offline. Updating card sharing is disabled.</Text>
+          </View>
+        )}
+
         <Text style={styles.help}>
           Select every group that should be able to view this card. Sharing never copies the card or changes ownership.
         </Text>
@@ -183,11 +196,15 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
           mode="contained"
           onPress={handleSave}
           loading={saving}
-          disabled={saving || !hasChanges}
-          style={[styles.saveButton, !hasChanges && { opacity: 0.55 }]}
+          disabled={saving || !hasChanges || !isConnected}
+          style={[styles.saveButton, (!hasChanges || !isConnected) && { opacity: 0.55 }]}
           labelStyle={{ color: '#FFFFFF', fontWeight: '700' }}
         >
-          {hasChanges ? 'Save sharing' : 'No changes to save'}
+          {!isConnected
+            ? 'Offline (Cannot save)'
+            : hasChanges
+            ? 'Save sharing'
+            : 'No changes to save'}
         </Button>
       </Modal>
     </Portal>
@@ -208,6 +225,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
   },
   title: {
     fontSize: 18,
