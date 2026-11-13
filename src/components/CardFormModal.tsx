@@ -18,7 +18,6 @@ import {
   TextInput,
   HelperText,
   Menu,
-  Switch,
   Icon,
   Searchbar,
 } from 'react-native-paper';
@@ -595,18 +594,6 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
               {errors.limit}
             </HelperText>
           )}
-
-          <View style={{ flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', marginVertical: 8 }}>
-            <Text style={{ fontWeight: 'bold' }}>Share with group</Text>
-            <Switch
-              value={!card.isPersonal}
-              onValueChange={val => {
-                cardRef.current.isPersonal = !val;
-                setCard(prev => ({ ...prev, isPersonal: !val }));
-              }}
-              style={{ marginStart: 10 }}
-            />
-          </View>
 
           <Button
             icon={isUpdate ? 'check-circle-outline' : 'plus-circle-outline'}

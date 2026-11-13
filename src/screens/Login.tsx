@@ -5,6 +5,8 @@ import { RootStackParamList } from '../App'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import auth from '@react-native-firebase/auth'
 import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore'
+import { upsertCurrentUserProfile } from '../services/userService'
+import { activatePendingMembershipsForUser } from '../services/groupService'
 import { Text, Snackbar, Icon } from 'react-native-paper'
 import { checkBiometricAvailability, authenticateWithBiometrics } from '../util/Biometric'
 import { ConnectivityContext } from '../util/Connectivity'
@@ -38,6 +40,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
                 const isAuthenticated = await authenticateWithBiometrics()
                 if (isAuthenticated) {
                     console.log('Biometric authentication successful, navigating to Home')
+                    await upsertCurrentUserProfile()
+                    await activatePendingMembershipsForUser()
                     navigation.reset({
                         index: 0,
                         routes: [{ name: 'Home' }],
@@ -48,6 +52,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
                 }
             } else {
                 console.log('Biometric not available on device, proceeding to Home for signed-in user')
+                await upsertCurrentUserProfile()
+                await activatePendingMembershipsForUser()
                 navigation.reset({
                     index: 0,
                     routes: [{ name: 'Home' }],
@@ -114,6 +120,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
                 const accessDoc = await getDoc(doc(db, 'accessList', currentUser.email))
                 if (accessDoc.exists()) {
                     console.log('User has access, navigating to Home')
+                    await upsertCurrentUserProfile()
+                    await activatePendingMembershipsForUser()
                     navigation.reset({
                         index: 0,
                         routes: [{ name: 'Home' }],

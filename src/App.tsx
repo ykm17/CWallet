@@ -4,6 +4,11 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Home from './screens/Home';
 import Login from './screens/Login';
+import Groups from './screens/Groups';
+import GroupForm from './screens/GroupForm';
+import GroupDetails from './screens/GroupDetails';
+import ShareToGroup from './screens/ShareToGroup';
+import UnshareFromGroup from './screens/UnshareFromGroup';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
 import { ConnectivityContext } from './util/Connectivity';
@@ -12,6 +17,11 @@ import { Icon } from 'react-native-paper';
 export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
+  Groups: undefined;
+  GroupForm: { groupId?: string };
+  GroupDetails: { groupId: string };
+  ShareToGroup: { cardIds?: string[]; groupId?: string };
+  UnshareFromGroup: { cardIds?: string[]; groupId?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -55,6 +65,11 @@ const App = () => {
             statusBarColor: '#F4F5F7',
             statusBarStyle: 'dark'
           }} />
+          <Stack.Screen name="Groups" component={Groups} />
+          <Stack.Screen name="GroupForm" component={GroupForm} />
+          <Stack.Screen name="GroupDetails" component={GroupDetails} />
+          <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
+          <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
           <Stack.Screen name="Login" component={Login} options={{
             // title: 'CWallet',
             // headerTitleAlign:'center',

@@ -1,8 +1,10 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler } from 'react-native';
-import React, { useContext, useEffect, useState } from 'react';
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert } from 'react-native';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
+import ShareCardModal from '../components/ShareCardModal';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
@@ -11,10 +13,15 @@ import { FAB, Text, SegmentedButtons, Searchbar, Icon } from 'react-native-paper
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
-import { decryptCardData, encryptCardData } from '../util/Crypto';
+import { encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
 import { detectCardType } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
+import { parseCardDocument } from '../services/cardService';
+import { useUserGroups } from '../hooks/useUserGroups';
+import { useAccessibleCards } from '../hooks/useAccessibleCards';
+import { upsertCurrentUserProfile } from '../services/userService';
+import { activatePendingMembershipsForUser } from '../services/groupService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -27,7 +34,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [cardToShare, setCardToShare] = useState<Card | null>(null);
   const { isConnected } = useContext(ConnectivityContext);
+  const { groups } = useUserGroups();
+  const { cards: sharedCards } = useAccessibleCards(groups, isConnected && isCardPersonal === 'GRP');
 
   const getCardEffectiveType = (card: Card): string => {
     if (card.cardType) return card.cardType.toUpperCase();
@@ -37,7 +49,23 @@ const Home: React.FC<Props> = ({ navigation }) => {
     return '';
   };
 
-  const filteredCards = cardData.filter((card) => {
+  const groupNameById = useMemo(
+    () => groups.reduce<Record<string, string>>((acc, g) => { acc[g.groupId] = g.name; return acc; }, {}),
+    [groups],
+  );
+
+  const personalCardsWithGroups = useMemo<Card[]>(() => {
+    return cardData.map((card) => ({
+      ...card,
+      accessGroupNames: (card.sharedGroupIds || [])
+        .map((gid) => groupNameById[gid])
+        .filter(Boolean),
+    }));
+  }, [cardData, groupNameById]);
+
+  const sourceCards: Card[] = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;
+
+  const filteredCards = sourceCards.filter((card: Card) => {
     const query = searchQuery.toLowerCase();
     const bankName = BANK_DICTIONARY[card.bankName]?.toLowerCase() || '';
     const networkName = (card.network && (CARD_NETWORKS[card.network] || card.network))?.toLowerCase() || '';
@@ -78,14 +106,39 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   useEffect(() => {
+    upsertCurrentUserProfile()
+      .then(() => activatePendingMembershipsForUser())
+      .catch((error: any) => {
+        console.error('Failed to refresh user profile / activate memberships', error);
+      });
+  }, []);
+
+  useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={signOutUser}>
-          <Text style={{ color: 'black' }}>Logout</Text>
-        </TouchableOpacity>
+        selectionMode ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity onPress={() => {
+              setSelectionMode(false);
+              setSelectedCardIds([]);
+            }}>
+              <Text style={{ color: 'black' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <TouchableOpacity onPress={() => navigation.navigate('Groups')}>
+              <Text style={{ color: 'black' }}>Groups</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogoutPress}>
+              <Text style={{ color: 'black' }}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        )
       ),
+      title: selectionMode ? `${selectedCardIds.length} selected` : undefined,
     });
-  }, []);
+  }, [navigation, selectionMode, selectedCardIds.length]);
 
   useEffect(() => {
     // Prevent navigating back to Login screen post login
@@ -97,24 +150,47 @@ const Home: React.FC<Props> = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
-  useEffect(() => {
-    // Handle hardware back press on Android
-    const onBackPress = () => {
-      if (modalVisible) {
-        hideModal();
+  useFocusEffect(
+    React.useCallback(() => {
+      // Handle hardware back press only when Home screen is focused
+      const onBackPress = () => {
+        if (modalVisible) {
+          hideModal();
+          return true;
+        }
+        if (cardToShare) {
+          setCardToShare(null);
+          return true;
+        }
+        if (selectionMode) {
+          setSelectionMode(false);
+          setSelectedCardIds([]);
+          return true;
+        }
+        // At root Home screen with no modals or selection: confirm before exit
+        Alert.alert(
+          'Exit CWallet',
+          'Are you sure you want to exit the app?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Exit',
+              style: 'destructive',
+              onPress: () => BackHandler.exitApp(),
+            },
+          ],
+        );
         return true;
-      }
-      BackHandler.exitApp();
-      return true;
-    };
+      };
 
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      onBackPress
-    );
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress,
+      );
 
-    return () => backHandler.remove();
-  }, [modalVisible]);
+      return () => backHandler.remove();
+    }, [modalVisible, cardToShare, selectionMode]),
+  );
 
   useEffect(() => {
     try {
@@ -126,24 +202,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
           const cards: Card[] = [];
 
           snapshot.forEach((snapshotDoc: any) => {
-            const data = snapshotDoc.data();
-            console.log("Processing document:", snapshotDoc.id, data);
-
-            if (!data.encryptedData) {
-              console.error("Document missing encryptedData:", snapshotDoc.id);
-              return;
-            }
-
-            try {
-              const decryptedCard = decryptCardData(data.encryptedData);
-              if (decryptedCard) {
-                cards.push({
-                  ...decryptedCard,
-                  key: snapshotDoc.id,
-                });
-              }
-            } catch (decryptError) {
-              console.error("Error decrypting card:", snapshotDoc.id, decryptError);
+            const card = parseCardDocument(snapshotDoc);
+            if (card) {
+              cards.push(card);
             }
           });
 
@@ -154,50 +215,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
           console.error("Snapshot listener error:", error);
         });
 
-        const qGroup = query(collection(db, 'cards'), where('isPersonal', '==', false));
-        const unsubscribeGroup = onSnapshot(qGroup, (snapshot) => {
-          console.log("Snapshot received (group):", snapshot.size, "documents");
-          const groupCards: Card[] = [];
-
-          snapshot.forEach((snapshotDoc: any) => {
-            const data = snapshotDoc.data();
-            console.log("Processing document (group):", snapshotDoc.id, data);
-
-            if (!data.encryptedData) {
-              console.error("Document missing encryptedData (group):", snapshotDoc.id);
-              return;
-            }
-
-            try {
-              const decryptedCard = decryptCardData(data.encryptedData);
-              if (decryptedCard) {
-                groupCards.push({
-                  ...decryptedCard,
-                  key: snapshotDoc.id,
-                });
-              }
-            } catch (decryptError) {
-              console.error("Error decrypting card (group):", snapshotDoc.id, decryptError);
-            }
-          });
-
-          console.log("Processed group cards:", groupCards.length);
-          setCardData(prev => {
-            const combined = [...prev];
-            groupCards.forEach(groupCard => {
-              if (!combined.some(c => c.key === groupCard.key)) {
-                combined.push(groupCard);
-              }
-            });
-            return combined;
-          });
-        }, (error) => {
-          console.error("Snapshot listener error (group):", error);
-        });
-
         return () => {
           unsubscribe();
-          unsubscribeGroup();
         };
       } else {
         fetchCardsFromStorage();
@@ -206,6 +225,21 @@ const Home: React.FC<Props> = ({ navigation }) => {
       console.error("Error setting up snapshot listeners:", e);
     }
   }, [isConnected]);
+
+  const handleLogoutPress = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out of CWallet?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: signOutUser,
+        },
+      ],
+    );
+  };
 
   const signOutUser = async () => {
     try {
@@ -227,25 +261,28 @@ const Home: React.FC<Props> = ({ navigation }) => {
       savedCard.email = auth().currentUser?.email || '';
       console.log("Card data before encryption:", savedCard);
       const encryptedData = encryptCardData(savedCard);
-      const cardDocData = {
+      const cardDocData: Record<string, any> = {
         ownerId: auth().currentUser?.uid,
         encryptedData,
         addedAt: serverTimestamp(),
-        isPersonal: savedCard.isPersonal,
-        sharedGroupIds: [],
+        isPersonal: true,
       };
 
       console.log("Creating/updating card with data:", cardDocData);
 
       if (savedCard.key) {
         console.log("Updating existing card:", savedCard.key);
-        await updateDoc(doc(db, 'cards', savedCard.key), cardDocData);
+        const { addedAt, ...updateData } = cardDocData;
+        await updateDoc(doc(db, 'cards', savedCard.key), updateData);
       } else {
         console.log("Creating new card");
-        await addDoc(collection(db, 'cards'), cardDocData);
+        await addDoc(collection(db, 'cards'), {
+          ...cardDocData,
+          sharedGroupIds: [],
+        });
       }
 
-      setIsCardPersonal(savedCard.isPersonal ? 'PRL' : 'GRP');
+      setIsCardPersonal('PRL');
       hideModal();
     } catch (error) {
       console.error('Error in handleSaveCard:', error);
@@ -296,17 +333,42 @@ const Home: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const displayedCards = filteredCards
-    .filter((card) =>
-      isCardPersonal === 'PRL'
-        ? card.isPersonal && card.email === auth().currentUser?.email
-        : !card.isPersonal
-    )
-    .filter((card) => {
+  const displayedCards = filteredCards.filter((card: Card) => {
       if (selectedTypeFilter === 'ALL') return true;
       const effectiveType = getCardEffectiveType(card);
       return effectiveType === selectedTypeFilter;
     });
+
+  const handleUnshareCard = (card: Card) => {
+    navigation.navigate('UnshareFromGroup', { cardIds: [card.key] });
+  };
+
+  const handleUnshareSelected = () => {
+    const ids = [...selectedCardIds];
+    setSelectionMode(false);
+    setSelectedCardIds([]);
+    navigation.navigate('UnshareFromGroup', { cardIds: ids });
+  };
+
+  const handleShareSelected = () => {
+    const ids = [...selectedCardIds];
+    setSelectionMode(false);
+    setSelectedCardIds([]);
+    navigation.navigate('ShareToGroup', { cardIds: ids });
+  };
+
+  const toggleCardSelection = (card: Card) => {
+    setSelectedCardIds((prev) => (
+      prev.includes(card.key) ? prev.filter((id) => id !== card.key) : [...prev, card.key]
+    ));
+  };
+
+  const enterSelectionMode = (card?: Card) => {
+    setSelectionMode(true);
+    if (card?.key) {
+      setSelectedCardIds([card.key]);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.mainContainer}>
@@ -316,6 +378,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
           onDismiss={hideModal}
           cardToEdit={cardToEdit}
           onSubmit={handleSaveCard}
+        />
+        <ShareCardModal
+          visible={Boolean(cardToShare)}
+          card={cardToShare}
+          onDismiss={() => setCardToShare(null)}
         />
 
         <Searchbar
@@ -331,6 +398,34 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         {/* Credit / Debit Filter Chips */}
         <View style={styles.filterChipContainer}>
+          {isCardPersonal === 'PRL' && (
+            <TouchableOpacity
+              style={[styles.filterChip, selectionMode && styles.filterChipActive]}
+              onPress={() => {
+                if (selectionMode) {
+                  setSelectionMode(false);
+                  setSelectedCardIds([]);
+                } else {
+                  enterSelectionMode();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon
+                source="checkbox-multiple-marked-outline"
+                size={13}
+                color={selectionMode ? '#FFFFFF' : '#4B5563'}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectionMode && styles.filterChipTextActive,
+                ]}
+              >
+                Select
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[
               styles.filterChip,
@@ -399,7 +494,17 @@ const Home: React.FC<Props> = ({ navigation }) => {
         <FlatList
           data={displayedCards}
           renderItem={({ item }) => (
-            <CustomCard cardDetails={item} onCardLongPress={showModal} onCardEdit={showModal} />
+            <CustomCard
+              cardDetails={item}
+              onCardLongPress={selectionMode ? toggleCardSelection : showModal}
+              onCardEdit={showModal}
+              onShare={isCardPersonal === 'PRL' ? setCardToShare : undefined}
+              onUnshare={isCardPersonal === 'PRL' ? handleUnshareCard : undefined}
+              selectionMode={selectionMode && isCardPersonal === 'PRL'}
+              isSelected={selectedCardIds.includes(item.key)}
+              onToggleSelect={toggleCardSelection}
+              showYourCardLabel={isCardPersonal === 'GRP'}
+            />
           )}
           keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
@@ -408,29 +513,55 @@ const Home: React.FC<Props> = ({ navigation }) => {
             <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
               <Icon source="credit-card-off-outline" size={44} color="#9CA3AF" />
               <Text style={{ fontSize: 16, color: '#6B7280', marginTop: 10, textAlign: 'center' }}>
-                {cardData.length === 0
-                  ? loadingScreen
+                {sourceCards.length === 0
+                  ? (isCardPersonal === 'GRP' ? 'No cards shared with your groups yet.' : loadingScreen)
                   : selectedTypeFilter !== 'ALL'
-                  ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'Personal' : 'Group'}`
-                  : `No cards found in ${isCardPersonal === 'PRL' ? 'Personal' : 'Group'}`}
+                  ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}`
+                  : `No cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}`}
               </Text>
             </View>
           }
         />
 
+        {selectionMode && isCardPersonal === 'PRL' && (
+          <View style={styles.selectionBar}>
+            <Text style={styles.selectionCount}>{selectedCardIds.length} selected</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.unshareSelectedButton, selectedCardIds.length === 0 && { opacity: 0.5 }]}
+                disabled={selectedCardIds.length === 0}
+                onPress={handleUnshareSelected}
+              >
+                <Text style={styles.unshareSelectedText}>Unshare</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.shareSelectedButton, selectedCardIds.length === 0 && { opacity: 0.5 }]}
+                disabled={selectedCardIds.length === 0}
+                onPress={handleShareSelected}
+              >
+                <Text style={styles.shareSelectedText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <SegmentedButtons
           value={isCardPersonal}
-          onValueChange={setIsCardPersonal}
+          onValueChange={(value) => {
+            setIsCardPersonal(value);
+            setSelectionMode(false);
+            setSelectedCardIds([]);
+          }}
           buttons={[
             {
               value: 'PRL',
-              label: 'Personal',
+              label: 'My Cards',
               style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#E5E7EB' },
               checkedColor: '#ffffff',
             },
             {
               value: 'GRP',
-              label: 'Group',
+              label: 'Shared Cards',
               style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#E5E7EB' },
               checkedColor: '#ffffff',
             },
@@ -439,11 +570,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
         />
 
         <FAB
-          visible={isConnected}
-          icon="plus"
+          visible={isConnected && !selectionMode}
+          icon={isCardPersonal === 'PRL' ? 'plus' : 'account-group'}
           style={styles.fab}
           color="white"
           onPress={() => {
+            if (isCardPersonal === 'GRP') {
+              navigation.navigate('Groups');
+              return;
+            }
             showModal();
           }}
         />
@@ -501,5 +636,40 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#FFFFFF',
+  },
+  selectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 10,
+    marginBottom: 4,
+    backgroundColor: '#111111',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  selectionCount: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  shareSelectedButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  shareSelectedText: {
+    color: '#111111',
+    fontWeight: '700',
+  },
+  unshareSelectedButton: {
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  unshareSelectedText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

@@ -5,17 +5,33 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, formatCardLimit, removeSpaceFromString } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
-import { getFirestore, doc, deleteDoc } from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
+import { deleteOwnedCard } from '../services/cardService'
 
 interface CardProps {
   cardDetails: Card,
   onCardLongPress?: (card: Card) => void,
-  onCardEdit?: (card: Card) => void
+  onCardEdit?: (card: Card) => void,
+  onShare?: (card: Card) => void,
+  onUnshare?: (card: Card) => void,
+  selectionMode?: boolean,
+  isSelected?: boolean,
+  onToggleSelect?: (card: Card) => void,
+  showYourCardLabel?: boolean,
 }
 
-const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardEdit }) => {
+const CustomCard: React.FC<CardProps> = ({
+  cardDetails,
+  onCardLongPress,
+  onCardEdit,
+  onShare,
+  onUnshare,
+  selectionMode,
+  isSelected,
+  onToggleSelect,
+  showYourCardLabel,
+}) => {
   const [visible, setVisible] = useState(false);
   const [copiedField, setCopiedField] = useState<'number' | 'card' | null>(null);
   const isConnected = useContext(ConnectivityContext).isConnected;
@@ -47,11 +63,19 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardE
     }, 2000);
   };
 
+  const isOwner = cardDetails.email === auth().currentUser?.email
+    || cardDetails.ownerId === auth().currentUser?.uid;
+
+  const handlePress = () => {
+    if (selectionMode) {
+      onToggleSelect?.(cardDetails);
+    }
+  };
+
   const handleDelete = async () => {
     try {
       if (isConnected) {
-        const db = getFirestore();
-        await deleteDoc(doc(db, 'cards', cardDetails.key));
+        await deleteOwnedCard(cardDetails.key);
       }
       hideDialog();
     } catch (error) {
@@ -89,9 +113,22 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardE
   const limitFormatted = formatCardLimit(cardDetails.limit);
 
   return (
-    <TouchableWithoutFeedback onLongPress={() => { onCardLongPress?.(cardDetails) }}>
+    <TouchableWithoutFeedback
+      onPress={handlePress}
+      onLongPress={() => {
+        if (selectionMode) {
+          onToggleSelect?.(cardDetails);
+          return;
+        }
+        onCardLongPress?.(cardDetails);
+      }}
+    >
 
-      <View style={[styles.container, { backgroundColor: BANK_COLORS[cardDetails.bankName] || '#1B1B1B' }]}>
+      <View style={[
+        styles.container,
+        { backgroundColor: BANK_COLORS[cardDetails.bankName] || '#1B1B1B' },
+        isSelected && styles.selectedContainer,
+      ]}>
         {/* Row 1: Card Owner & Limit (Left) & Edit/Delete Buttons (Top Right) */}
         <View style={styles.spaceContainer}>
           <View style={{ flex: 1, paddingRight: 8 }}>
@@ -111,23 +148,52 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardE
             </View>
           </View>
 
-          {isConnected && cardDetails.email === auth().currentUser?.email && (
+          {isConnected && isOwner && !selectionMode && (
             <View style={styles.topRightActions}>
-              <TouchableOpacity
-                style={styles.actionIconBtn}
-                onPress={handleEdit}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Icon source="pencil" color="white" size={18} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionIconBtn}
-                onPress={showDialog}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Icon source="delete-outline" color="white" size={18} />
-              </TouchableOpacity>
+              {onShare && (
+                <TouchableOpacity
+                  style={styles.actionIconBtn}
+                  onPress={() => onShare(cardDetails)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source="share-variant" color="white" size={18} />
+                </TouchableOpacity>
+              )}
+              {onUnshare && !!cardDetails.sharedGroupIds?.length && (
+                <TouchableOpacity
+                  style={styles.actionIconBtn}
+                  onPress={() => onUnshare(cardDetails)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source="share-off" color="white" size={18} />
+                </TouchableOpacity>
+              )}
+              {onCardEdit && (
+                <TouchableOpacity
+                  style={styles.actionIconBtn}
+                  onPress={handleEdit}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source="pencil" color="white" size={18} />
+                </TouchableOpacity>
+              )}
+              {onCardEdit && (
+                <TouchableOpacity
+                  style={styles.actionIconBtn}
+                  onPress={showDialog}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source="delete-outline" color="white" size={18} />
+                </TouchableOpacity>
+              )}
             </View>
+          )}
+          {selectionMode && (
+            <Icon
+              source={isSelected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+              color="white"
+              size={22}
+            />
           )}
 
         </View>
@@ -176,11 +242,18 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardE
               {cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}
             </Text>
 
-            {cardDetails.name ? (
-              <View style={styles.cardNameContainer}>
-                <Text style={styles.cardNameText}>{cardDetails.name}</Text>
-              </View>
-            ) : null}
+            <View style={styles.labelRow}>
+              {showYourCardLabel && isOwner ? (
+                <View style={styles.yourCardContainer}>
+                  <Text style={styles.yourCardText}>Your Card</Text>
+                </View>
+              ) : null}
+              {cardDetails.name ? (
+                <View style={styles.cardNameContainer}>
+                  <Text style={styles.cardNameText}>{cardDetails.name}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           <View style={{ alignItems: 'flex-end', justifyContent: 'flex-end', flex: 1, paddingLeft: 6 }}>
@@ -200,6 +273,15 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress, onCardE
             ) : null}
           </View>
         </View>
+
+        {!!cardDetails.accessGroupNames?.length && (
+          <View style={styles.accessGroupsContainer}>
+            <Icon source="account-group-outline" size={13} color="rgba(255, 255, 255, 0.85)" />
+            <Text style={styles.accessGroupsText}>
+              via {cardDetails.accessGroupNames.join(', ')}
+            </Text>
+          </View>
+        )}
 
         {/* Copy Card Option at Bottom Center */}
         <View style={styles.bottomCenterContainer}>
@@ -300,6 +382,43 @@ const styles = StyleSheet.create({
     marginEnd: 10,
     borderRadius: 12,
   },
+  selectedContainer: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  yourCardContainer: {
+    backgroundColor: '#FACC15',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  yourCardText: {
+    color: '#111111',
+    fontWeight: '800',
+    fontSize: 9,
+    textTransform: 'uppercase',
+  },
+  accessGroupsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  accessGroupsText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   heading_1: {
     alignSelf: 'flex-start',
     color: 'rgba(255, 255, 255, 0.8)',
@@ -343,7 +462,8 @@ const styles = StyleSheet.create({
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    flexShrink: 0,
   },
   actionIconBtn: {
     padding: 2,

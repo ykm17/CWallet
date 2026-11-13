@@ -1,0 +1,189 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function groupPath(groupId) {
+      return /databases/$(database)/documents/groups/$(groupId);
+    }
+
+    function memberPath(groupId, uid) {
+      return /databases/$(database)/documents/groups/$(groupId)/members/$(uid);
+    }
+
+    function cardPath(cardId) {
+      return /databases/$(database)/documents/cards/$(cardId);
+    }
+
+    function groupDoc(groupId) {
+      return getAfter(groupPath(groupId)).data;
+    }
+
+    function isActiveMember(groupId) {
+      return isSignedIn()
+        && exists(memberPath(groupId, request.auth.uid))
+        && get(memberPath(groupId, request.auth.uid)).data.status == 'active';
+    }
+
+    function isGroupOwner(groupId) {
+      return isSignedIn()
+        && exists(groupPath(groupId))
+        && get(groupPath(groupId)).data.ownerId == request.auth.uid;
+    }
+
+    function isGroupOwnerAfter(groupId) {
+      return isSignedIn()
+        && existsAfter(groupPath(groupId))
+        && groupDoc(groupId).ownerId == request.auth.uid;
+    }
+
+    function isCardOwner(cardId) {
+      return isSignedIn()
+        && exists(cardPath(cardId))
+        && get(cardPath(cardId)).data.ownerId == request.auth.uid;
+    }
+
+    function sharedGroupAt(card, index) {
+      return card.sharedGroupIds.size() > index
+        && isActiveMember(card.sharedGroupIds[index]);
+    }
+
+    function canReadSharedCard(card) {
+      return card.keys().hasAny(['sharedGroupIds'])
+        && card.sharedGroupIds is list
+        && (
+          sharedGroupAt(card, 0)
+          || sharedGroupAt(card, 1)
+          || sharedGroupAt(card, 2)
+          || sharedGroupAt(card, 3)
+          || sharedGroupAt(card, 4)
+          || sharedGroupAt(card, 5)
+          || sharedGroupAt(card, 6)
+          || sharedGroupAt(card, 7)
+          || sharedGroupAt(card, 8)
+          || sharedGroupAt(card, 9)
+          || sharedGroupAt(card, 10)
+          || sharedGroupAt(card, 11)
+          || sharedGroupAt(card, 12)
+          || sharedGroupAt(card, 13)
+          || sharedGroupAt(card, 14)
+          || sharedGroupAt(card, 15)
+          || sharedGroupAt(card, 16)
+          || sharedGroupAt(card, 17)
+          || sharedGroupAt(card, 18)
+          || sharedGroupAt(card, 19)
+        );
+    }
+
+    function canContributeToGroup(groupId) {
+      return isActiveMember(groupId)
+        && (
+          get(groupPath(groupId)).data.contributionPermission == 'open'
+          || get(groupPath(groupId)).data.ownerId == request.auth.uid
+        );
+    }
+
+    match /accessList/{email} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isUser(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string;
+      allow delete: if false;
+    }
+
+    match /cards/{cardId} {
+      allow get: if isSignedIn()
+        && (
+          resource.data.ownerId == request.auth.uid
+          || canReadSharedCard(resource.data)
+        );
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /groups/{groupId} {
+      allow get: if isActiveMember(groupId) || isGroupOwner(groupId);
+      allow list: if isSignedIn()
+        && (
+          resource.data.ownerId == request.auth.uid
+          || request.auth.uid in resource.data.memberIds
+          || (request.auth.token.email != null && ('pending_' + request.auth.token.email.lower()) in resource.data.memberIds)
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.contributionPermission in ['open', 'owner_only']
+        && request.auth.uid in request.resource.data.memberIds;
+      allow update: if (isGroupOwner(groupId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.contributionPermission in ['open', 'owner_only'])
+        || (
+          isSignedIn()
+          && request.auth.token.email != null
+          && ('pending_' + request.auth.token.email.lower()) in resource.data.memberIds
+          && request.auth.uid in request.resource.data.memberIds
+        );
+      allow delete: if isGroupOwner(groupId);
+
+      match /members/{userId} {
+        allow read: if isActiveMember(groupId) || isGroupOwner(groupId);
+        allow create: if (isGroupOwnerAfter(groupId)
+          && request.resource.data.userId == userId
+          && request.resource.data.status in ['active', 'pending']
+          && request.resource.data.role in ['owner', 'member'])
+          || (
+            isSignedIn()
+            && request.auth.uid == userId
+            && request.resource.data.status == 'active'
+            && request.auth.token.email != null
+            && exists(memberPath(groupId, 'pending_' + request.auth.token.email.lower()))
+          );
+        allow update: if isGroupOwner(groupId)
+          && request.resource.data.userId == userId;
+        allow delete: if (isGroupOwner(groupId) && userId != get(groupPath(groupId)).data.ownerId)
+          || (
+            isSignedIn()
+            && request.auth.token.email != null
+            && userId == 'pending_' + request.auth.token.email.lower()
+          );
+      }
+    }
+
+    match /cardGroupAccess/{accessId} {
+      allow read: if isSignedIn()
+        && (
+          isActiveMember(resource.data.groupId)
+          || isCardOwner(resource.data.cardId)
+          || isGroupOwner(resource.data.groupId)
+        );
+      allow create: if isSignedIn()
+        && accessId == request.resource.data.cardId + '_' + request.resource.data.groupId
+        && request.resource.data.sharedBy == request.auth.uid
+        && isCardOwner(request.resource.data.cardId)
+        && canContributeToGroup(request.resource.data.groupId);
+      allow update: if false;
+      allow delete: if isSignedIn()
+        && (
+          isCardOwner(resource.data.cardId)
+          || isGroupOwner(resource.data.groupId)
+          || resource.data.sharedBy == request.auth.uid
+        );
+    }
+  }
+}
