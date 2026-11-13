@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import CustomCard from '../components/CustomCard';
@@ -13,7 +13,7 @@ import { Card } from '../types/Types';
 import { FAB, Text, SegmentedButtons, Searchbar, Icon, Dialog, Portal } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
-import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
+import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp, getDocs } from '@react-native-firebase/firestore';
 import { encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
 import { detectCardType } from '../util/Utils';
@@ -40,6 +40,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [cardToShare, setCardToShare] = useState<Card | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { isConnected } = useContext(ConnectivityContext);
   const { groups, loading: groupsLoading } = useUserGroups();
   const { cards: sharedCards, loading: sharedCardsLoading } = useAccessibleCards(groups, isConnected);
@@ -313,6 +314,39 @@ const Home: React.FC<Props> = ({ navigation }) => {
       console.error('Failed to load cards from storage', e);
     } finally {
       setPersonalLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (isConnected) {
+        await Promise.allSettled([
+          upsertCurrentUserProfile().then(() => activatePendingMembershipsForUser()),
+          (async () => {
+            const uid = auth().currentUser?.uid;
+            if (uid) {
+              const q = query(collection(db, 'cards'), where('ownerId', '==', uid));
+              const snap = await getDocs(q);
+              const cards: Card[] = [];
+              snap.forEach((docSnap: any) => {
+                const card = parseCardDocument(docSnap);
+                if (card) {
+                  cards.push(card);
+                }
+              });
+              setCardData(cards);
+              await saveCardsInSecureStorage(cards);
+            }
+          })(),
+        ]);
+      } else {
+        await fetchCardsFromStorage();
+      }
+    } catch (e) {
+      console.error('Failed to refresh cards:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 300);
     }
   };
 
@@ -676,6 +710,14 @@ const Home: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#111111']}
+              tintColor="#111111"
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               {isCurrentTabLoading && sourceCards.length === 0 ? (

@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, Alert, FlatList, TouchableOpacity, TextInput as RNTextInput } from 'react-native';
+import { View, StyleSheet, Alert, FlatList, TouchableOpacity, TextInput as RNTextInput, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -30,6 +30,20 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [leaveVisible, setLeaveVisible] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (isConnected && isOwner) {
+        await upgradePendingMembersIfRegistered(groupId, members);
+      }
+    } catch (e) {
+      console.error('Failed to refresh group details:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
 
   const isOwner = group?.ownerId === uid;
   const userCardsInGroup = cards.filter(
@@ -332,6 +346,14 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         <FlatList
           data={cards}
           keyExtractor={(item) => item.key}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#111111']}
+              tintColor="#111111"
+            />
+          }
           renderItem={({ item }) => (
             <CustomCard
               cardDetails={item}
@@ -376,6 +398,14 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         <FlatList
           data={members}
           keyExtractor={(item) => item.userId}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#111111']}
+              tintColor="#111111"
+            />
+          }
           renderItem={renderMember}
           contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
           ListHeaderComponent={

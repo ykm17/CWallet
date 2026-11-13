@@ -1,12 +1,12 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Dialog, FAB, Icon, Portal, Text } from 'react-native-paper';
 import { RootStackParamList } from '../App';
 import { Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { contributionLabel } from '../services/sharingUtils';
-import { leaveGroup } from '../services/groupService';
+import { activatePendingMembershipsForUser, leaveGroup } from '../services/groupService';
 import { ConnectivityContext } from '../util/Connectivity';
 import auth from '@react-native-firebase/auth';
 
@@ -18,6 +18,20 @@ const Groups: React.FC<Props> = ({ navigation }) => {
   const { groups, loading, error } = useUserGroups();
   const [leaveTarget, setLeaveTarget] = useState<Group | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (isConnected) {
+        await activatePendingMembershipsForUser();
+      }
+    } catch (e) {
+      console.error('Failed to refresh groups:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
 
   useEffect(() => {
     navigation.setOptions({
@@ -95,6 +109,14 @@ const Groups: React.FC<Props> = ({ navigation }) => {
         keyExtractor={(item) => item.groupId}
         renderItem={renderGroup}
         contentContainerStyle={groups.length === 0 ? styles.emptyContainer : styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#111111']}
+            tintColor="#111111"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             {loading ? (
