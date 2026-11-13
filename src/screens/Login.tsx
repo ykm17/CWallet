@@ -1,23 +1,26 @@
-import { View, StyleSheet, TouchableOpacity } from 'react-native'
-import React, { useEffect, useState } from 'react'
-import { useNavigation } from '@react-navigation/native'
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native'
+import React, { useEffect, useRef, useState, useContext } from 'react'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../App'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import auth from '@react-native-firebase/auth'
-import firestore, { getFirestore, doc, getDoc } from '@react-native-firebase/firestore'
-import { Text, Snackbar } from 'react-native-paper'
+import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore'
+import { Text, Snackbar, Icon } from 'react-native-paper'
 import { checkBiometricAvailability, authenticateWithBiometrics } from '../util/Biometric'
 import { ConnectivityContext } from '../util/Connectivity'
 import { WEB_CLIENT_ID } from '../constants/Constants'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>
 
-const Login: React.FC<Props> = () => {
-    const navigation = useNavigation()
+const Login: React.FC<Props> = ({ navigation }) => {
     const [loginDisabled, setLoginDisabled] = useState(false)
     const [visible, setVisible] = useState(false)
-    const { isConnected } = React.useContext(ConnectivityContext)
+    const [errorMessage, setErrorMessage] = useState('Error signing in. Please try again.')
+    const [checkingAuth, setCheckingAuth] = useState(true)
+    const [isAlreadyLoggedIn, setIsAlreadyLoggedIn] = useState(false)
+    const { isConnected } = useContext(ConnectivityContext)
+    const isAuthenticatingRef = useRef(false)
+    const isSigningInWithGoogle = useRef(false)
 
     useEffect(() => {
         GoogleSignin.configure({
@@ -25,39 +28,67 @@ const Login: React.FC<Props> = () => {
         })
     }, [])
 
-    useEffect(() => {
-        checkUserAuthStatus()
-    }, [])
-
-    const checkUserAuthStatus = async () => {
+    const handleBiometricLogin = async () => {
+        if (isAuthenticatingRef.current) return
+        isAuthenticatingRef.current = true
         try {
-            const currentUser = auth().currentUser
-            if (currentUser) {
-                console.log('User is already logged in, checking biometric availability')
-                const isBiometricAvailable = await checkBiometricAvailability()
-                if (isBiometricAvailable) {
-                    console.log('Biometric available, attempting authentication')
-                    const isAuthenticated = await authenticateWithBiometrics()
-                    if (isAuthenticated) {
-                        console.log('Biometric authentication successful')
-                        navigation.navigate('Home' as never)
-                    } else {
-                        console.log('Biometric authentication failed')
-                        // User can still use Google login
-                    }
+            const isBiometricAvailable = await checkBiometricAvailability()
+            if (isBiometricAvailable) {
+                console.log('Biometric available, attempting authentication')
+                const isAuthenticated = await authenticateWithBiometrics()
+                if (isAuthenticated) {
+                    console.log('Biometric authentication successful, navigating to Home')
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Home' }],
+                    })
+                    return
                 } else {
-                    console.log('Biometric not available, showing Google login')
+                    console.log('Biometric authentication failed or cancelled')
                 }
             } else {
-                console.log('No user logged in, showing Google login')
+                console.log('Biometric not available on device, proceeding to Home for signed-in user')
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Home' }],
+                })
+                return
             }
         } catch (error) {
-            console.error('Error checking user auth status:', error)
+            console.error('Error during biometric authentication:', error)
+        } finally {
+            isAuthenticatingRef.current = false
+            setCheckingAuth(false)
         }
     }
 
+    useEffect(() => {
+        let isMounted = true
+
+        const unsubscribe = auth().onAuthStateChanged(async (currentUser) => {
+            if (!isMounted) return
+            if (isSigningInWithGoogle.current) return
+
+            if (currentUser) {
+                console.log('User is already logged in:', currentUser.email)
+                setIsAlreadyLoggedIn(true)
+                await handleBiometricLogin()
+            } else {
+                console.log('No user logged in, showing Google login')
+                setIsAlreadyLoggedIn(false)
+                setCheckingAuth(false)
+            }
+        })
+
+        return () => {
+            isMounted = false
+            unsubscribe()
+        }
+    }, [])
+
     const signInWithGoogle = async () => {
         try {
+            isSigningInWithGoogle.current = true
             setLoginDisabled(true)
             // Check if you have already signed in
             const hasPlayServices = await GoogleSignin.hasPlayServices()
@@ -83,19 +114,26 @@ const Login: React.FC<Props> = () => {
                 const accessDoc = await getDoc(doc(db, 'accessList', currentUser.email))
                 if (accessDoc.exists()) {
                     console.log('User has access, navigating to Home')
-                    navigation.navigate('Home' as never)
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Home' }],
+                    })
                 } else {
                     console.log('User does not have access')
                     await auth().signOut()
                     await GoogleSignin.signOut()
+                    setIsAlreadyLoggedIn(false)
+                    setErrorMessage('You do not have access to CWallet.')
                     setVisible(true)
                 }
             }
         } catch (error) {
             console.error('Google Sign-In Error:', error)
+            setErrorMessage('Error signing in. Please try again.')
             setVisible(true)
         } finally {
             setLoginDisabled(false)
+            isSigningInWithGoogle.current = false
         }
     }
 
@@ -106,13 +144,32 @@ const Login: React.FC<Props> = () => {
             <Text style={styles.title}>CWallet</Text>
             <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
 
-            <TouchableOpacity 
-                style={styles.button} 
-                onPress={signInWithGoogle} 
-                disabled={loginDisabled || !isConnected}
-            >
-                <Text style={styles.buttonText}>Sign in with Google</Text>
-            </TouchableOpacity>
+            {checkingAuth ? (
+                <ActivityIndicator size="large" color="#4285F4" style={styles.loader} />
+            ) : (
+                <View style={styles.buttonContainer}>
+                    {isAlreadyLoggedIn && (
+                        <TouchableOpacity
+                            style={styles.biometricButton}
+                            onPress={handleBiometricLogin}
+                            disabled={loginDisabled}
+                        >
+                            <Icon source="fingerprint" size={24} color="white" />
+                            <Text style={styles.biometricButtonText}>Unlock with Biometrics</Text>
+                        </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                        style={[styles.button, isAlreadyLoggedIn && styles.secondaryButton]}
+                        onPress={signInWithGoogle}
+                        disabled={loginDisabled || !isConnected}
+                    >
+                        <Text style={[styles.buttonText, isAlreadyLoggedIn && styles.secondaryButtonText]}>
+                            {isAlreadyLoggedIn ? 'Sign in with another account' : 'Sign in with Google'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             <Snackbar
                 visible={visible}
@@ -121,7 +178,7 @@ const Login: React.FC<Props> = () => {
                     label: 'Dismiss',
                     onPress: onDismissSnackBar,
                 }}>
-                Error signing in. Please try again.
+                {errorMessage}
             </Snackbar>
         </View>
     )
@@ -134,29 +191,63 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'white'
+        backgroundColor: 'white',
+        paddingHorizontal: 24,
     },
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        marginBottom: 20
+        marginBottom: 20,
     },
     description: {
         fontSize: 16,
         textAlign: 'center',
-        marginBottom: 30
+        marginBottom: 30,
+        color: '#666',
+    },
+    loader: {
+        marginTop: 20,
+    },
+    buttonContainer: {
+        width: '100%',
+        alignItems: 'center',
+    },
+    biometricButton: {
+        backgroundColor: '#0F9D58',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 8,
+        width: '80%',
+        marginBottom: 16,
+    },
+    biometricButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginLeft: 8,
     },
     button: {
         backgroundColor: '#4285F4',
         paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 5,
-        marginTop: 20
+        paddingVertical: 12,
+        borderRadius: 8,
+        width: '80%',
+        alignItems: 'center',
     },
     buttonText: {
         color: 'white',
         fontSize: 16,
-        fontWeight: 'bold'
-    }
+        fontWeight: 'bold',
+    },
+    secondaryButton: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: '#4285F4',
+    },
+    secondaryButtonText: {
+        color: '#4285F4',
+    },
 })
-

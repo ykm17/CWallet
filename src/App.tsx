@@ -48,6 +48,8 @@ const App = () => {
                 <Text style={{ color: 'black' }}>{useContext(ConnectivityContext).isConnected ? 'Online' : 'Offline'}</Text>
               </>
             ),
+            headerBackVisible: false,
+            gestureEnabled: false,
             headerTitleAlign: 'center',
             statusBarColor: 'white',
             statusBarStyle: 'dark'
@@ -60,7 +62,8 @@ const App = () => {
             // headerTitleStyle:{
             //   fontSize:20
             // }
-            headerShown: false
+            headerShown: false,
+            gestureEnabled: false
           }} />
         </Stack.Navigator>
       </NavigationContainer>

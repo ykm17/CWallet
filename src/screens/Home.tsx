@@ -1,113 +1,37 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native'
-import React, { useContext, useEffect, useRef, useState } from 'react'
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler } from 'react-native';
+import React, { useContext, useEffect, useState } from 'react';
 import CustomCard from '../components/CustomCard';
+import CardFormModal from '../components/CardFormModal';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
-import { FlatList } from 'react-native';
 import { Card } from '../types/Types';
-import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar, Icon } from 'react-native-paper';
+import { FAB, Text, SegmentedButtons, Searchbar } from 'react-native-paper';
 import { isEmpty } from 'lodash';
-import { BANK_DICTIONARY, ENV } from '../constants/Constants';
+import { BANK_DICTIONARY } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
-import { formatCardNumber } from '../util/Utils';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
 import EncryptedStorage from 'react-native-encrypted-storage';
-import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan } from '../util/NfcCardReader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const Home: React.FC<Props> = ({ navigation }) => {
   const db = getFirestore();
-  const isModelForUpdate = useRef(false);
-  const openMenu = () => setDropDownVisible(true);
-  const closeMenu = () => setDropDownVisible(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [isFormValid, setIsFormValid] = useState(false);
-  const [dropDownVisible, setDropDownVisible] = useState(false);
+  const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
   const [cardData, setCardData] = useState<Card[]>([]);
   const [isCardPersonal, setIsCardPersonal] = useState('GRP');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
   const { isConnected } = useContext(ConnectivityContext);
-  const [nfcScanning, setNfcScanning] = useState(false);
-  const [nfcStatusText, setNfcStatusText] = useState('');
-
-  const [card, setCard] = useState<Card>({
-    ownerName: '',
-    bankName: '',
-    number: '',
-    month: '',
-    year: '',
-    cvv: '',
-    name: '',
-    limit: '',
-    key: '',
-    isPersonal: true,
-    email: ''
-  });
-  const [errors, setErrors] = useState<Card>({
-    ownerName: '',
-    bankName: '',
-    number: '',
-    month: '',
-    year: '',
-    cvv: '',
-    name: '',
-    limit: '',
-    key: '',
-    isPersonal: true,
-    email: ''
-  });
-  const [touched, setTouched] = useState<Card>({
-    ownerName: '',
-    bankName: '',
-    number: '',
-    month: '',
-    year: '',
-    cvv: '',
-    name: '',
-    limit: '',
-    key: '',
-    isPersonal: true,
-    email: ''
-  });
-  const resetCardData = () => {
-    setCard({
-      ownerName: '',
-      bankName: '',
-      number: '',
-      month: '',
-      year: '',
-      cvv: '',
-      name: '',
-      limit: '',
-      key: '',
-      isPersonal: true,
-      email: ''
-    });
-    setTouched({
-      ownerName: '',
-      bankName: '',
-      number: '',
-      month: '',
-      year: '',
-      cvv: '',
-      name: '',
-      limit: '',
-      key: '',
-      isPersonal: true,
-      email: ''
-    });
-  }
 
   const filteredCards = cardData.filter((card) => {
     const query = searchQuery.toLowerCase();
     return (
       card.ownerName.toLowerCase().includes(query) ||
-      BANK_DICTIONARY[card.bankName].toLowerCase().includes(query) ||
+      BANK_DICTIONARY[card.bankName]?.toLowerCase().includes(query) ||
       card.number.includes(query) ||
       card.month.includes(query) ||
       card.year.includes(query) ||
@@ -118,35 +42,61 @@ const Home: React.FC<Props> = ({ navigation }) => {
     );
   });
 
-  const showModal = (card: Card) => {
-
-    if (!isEmpty(card.bankName)) {
-
-      if (auth().currentUser?.email === card.email) {
-        isModelForUpdate.current = true;
-        setCard(card);
+  const showModal = (selectedCard?: Card) => {
+    if (selectedCard && !isEmpty(selectedCard.bankName)) {
+      if (auth().currentUser?.email === selectedCard.email) {
+        setCardToEdit(selectedCard);
         setModalVisible(true);
-      } else {
-        //todo:
       }
     } else {
+      setCardToEdit(null);
       setModalVisible(true);
     }
-  }
+  };
+
   const hideModal = () => {
     setModalVisible(false);
-    resetCardData();
-  }
-
-  useEffect(() => {
-    validateForm();
-  }, [card]);
+    setCardToEdit(null);
+  };
 
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => <TouchableOpacity onPress={signOutUser}><Text style={{ color: 'black' }}>Logout</Text></TouchableOpacity>,
+      headerRight: () => (
+        <TouchableOpacity onPress={signOutUser}>
+          <Text style={{ color: 'black' }}>Logout</Text>
+        </TouchableOpacity>
+      ),
     });
   }, []);
+
+  useEffect(() => {
+    // Prevent navigating back to Login screen post login
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (e.data.action.type === 'GO_BACK' || e.data.action.type === 'POP') {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
+    // Handle hardware back press on Android
+    const onBackPress = () => {
+      if (modalVisible) {
+        hideModal();
+        return true;
+      }
+      BackHandler.exitApp();
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress
+    );
+
+    return () => backHandler.remove();
+  }, [modalVisible]);
 
   useEffect(() => {
     try {
@@ -154,254 +104,140 @@ const Home: React.FC<Props> = ({ navigation }) => {
         console.log("Fetching cards for user:", auth().currentUser?.uid);
         const q = query(collection(db, 'cards'), where('ownerId', '==', auth().currentUser?.uid));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            console.log("Snapshot received:", snapshot.size, "documents");
-            const cards: Card[] = [];
-            
-            snapshot.forEach((doc: any) => {
-              const data = doc.data();
-              console.log("Processing document:", doc.id, data);
-              
-              if (!data.encryptedData) {
-                console.error("Document missing encryptedData:", doc.id);
-                return;
-              }
-              
-              try {
-                const decryptedData = decryptCardData(data.encryptedData);
-                if (decryptedData) {
-                  console.log("Successfully decrypted card:", decryptedData);
-                  cards.push({ ...decryptedData, key: doc.id });
-                } else {
-                  console.error("Failed to decrypt card data for document:", doc.id);
-                }
-              } catch (error) {
-                console.error("Error decrypting card data for document:", doc.id, error);
-              }
-            });
-            
-            console.log("Total cards processed:", cards.length);
-            setCardData(cards);
-            if (cards.length > 0) {
-              saveCardsInSecureStorage(cards);
-              setLoadingScreen("");
-            } else {
-              setLoadingScreen("No cards found.");
+          console.log("Snapshot received:", snapshot.size, "documents");
+          const cards: Card[] = [];
+
+          snapshot.forEach((snapshotDoc: any) => {
+            const data = snapshotDoc.data();
+            console.log("Processing document:", snapshotDoc.id, data);
+
+            if (!data.encryptedData) {
+              console.error("Document missing encryptedData:", snapshotDoc.id);
+              return;
             }
-          }, (error) => {
-            console.error("Error fetching cards:", error);
-            setLoadingScreen("Error loading cards.");
+
+            try {
+              const decryptedCard = decryptCardData(data.encryptedData);
+              if (decryptedCard) {
+                cards.push({
+                  ...decryptedCard,
+                  key: snapshotDoc.id,
+                });
+              }
+            } catch (decryptError) {
+              console.error("Error decrypting card:", snapshotDoc.id, decryptError);
+            }
           });
 
+          console.log("Processed cards:", cards.length);
+          setCardData(cards);
+          saveCardsInSecureStorage(cards);
+        }, (error) => {
+          console.error("Snapshot listener error:", error);
+        });
+
+        const qGroup = query(collection(db, 'cards'), where('isPersonal', '==', false));
+        const unsubscribeGroup = onSnapshot(qGroup, (snapshot) => {
+          console.log("Snapshot received (group):", snapshot.size, "documents");
+          const groupCards: Card[] = [];
+
+          snapshot.forEach((snapshotDoc: any) => {
+            const data = snapshotDoc.data();
+            console.log("Processing document (group):", snapshotDoc.id, data);
+
+            if (!data.encryptedData) {
+              console.error("Document missing encryptedData (group):", snapshotDoc.id);
+              return;
+            }
+
+            try {
+              const decryptedCard = decryptCardData(data.encryptedData);
+              if (decryptedCard) {
+                groupCards.push({
+                  ...decryptedCard,
+                  key: snapshotDoc.id,
+                });
+              }
+            } catch (decryptError) {
+              console.error("Error decrypting card (group):", snapshotDoc.id, decryptError);
+            }
+          });
+
+          console.log("Processed group cards:", groupCards.length);
+          setCardData(prev => {
+            const combined = [...prev];
+            groupCards.forEach(groupCard => {
+              if (!combined.some(c => c.key === groupCard.key)) {
+                combined.push(groupCard);
+              }
+            });
+            return combined;
+          });
+        }, (error) => {
+          console.error("Snapshot listener error (group):", error);
+        });
+
         return () => {
-          console.log("Cleaning up Firestore listener");
           unsubscribe();
+          unsubscribeGroup();
         };
       } else {
-        console.log("Offline mode: Loading cards from secure storage");
-        const loadCards = async () => {
-          const storedCards = await getCardsFromSecureStorage();
-          console.log("Loaded cards from secure storage:", storedCards.length);
-          setCardData(storedCards);
-          setLoadingScreen(storedCards.length === 0 ? "No cards found." : "");
-        };
-        loadCards();
+        fetchCardsFromStorage();
       }
-    } catch (error) {
-      console.error("Error in useEffect:", error);
-      setLoadingScreen("Error loading cards.");
+    } catch (e) {
+      console.error("Error setting up snapshot listeners:", e);
     }
   }, [isConnected]);
 
-  const stopNfcScan = async () => {
-    setNfcScanning(false);
-    setNfcStatusText('');
-    await cancelNfcScan();
-  };
-
-  const handleNfcScan = async () => {
-    try {
-      const supported = await isNfcSupported();
-      if (!supported) {
-        Alert.alert('NFC Not Supported', 'Your device does not support NFC card scanning.');
-        return;
-      }
-      const enabled = await isNfcEnabled();
-      if (!enabled) {
-        Alert.alert(
-          'NFC Disabled',
-          'Please enable NFC in your device settings to scan your contactless card.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => goToNfcSettings() },
-          ],
-        );
-        return;
-      }
-
-      setNfcScanning(true);
-      setNfcStatusText('Hold your card close to the back of your phone...');
-
-      const scannedData = await scanCardWithNfc();
-
-      const updated = { ...card };
-
-      if (scannedData.cardNumber) {
-        updated.number = formatCardNumber(scannedData.cardNumber);
-      }
-      if (scannedData.expiryMonth) {
-        updated.month = scannedData.expiryMonth;
-      }
-      if (scannedData.expiryYear) {
-        updated.year = scannedData.expiryYear;
-      }
-      if (scannedData.ownerName) {
-        updated.ownerName = scannedData.ownerName;
-      }
-      if (scannedData.bankName) {
-        updated.bankName = scannedData.bankName;
-      }
-      if (scannedData.cardName) {
-        updated.name = scannedData.cardName;
-      }
-
-      setCard(updated);
-      setTouched(prev => ({
-        ...prev,
-        number: true,
-        month: true,
-        year: true,
-        ownerName: true,
-        bankName: true,
-        name: true,
-      } as any));
-      setNfcScanning(false);
-      setNfcStatusText('');
-
-      const filledFields: string[] = [];
-      if (scannedData.cardNumber) filledFields.push('Card Number');
-      if (scannedData.expiryMonth && scannedData.expiryYear) filledFields.push('Expiry Date');
-      if (scannedData.bankName) filledFields.push('Bank');
-      if (scannedData.cardName) filledFields.push('Card Type');
-      if (scannedData.ownerName) filledFields.push('Owner Name');
-
-      Alert.alert(
-        'Card Scanned Successfully!',
-        `Auto-filled: ${filledFields.join(', ')}.\n\nNote: For your protection, CVV is never stored on the contactless chip — please enter your 3-digit CVV manually.`,
-      );
-    } catch (err: any) {
-      setNfcScanning(false);
-      setNfcStatusText('');
-      const msg = err?.message || 'Failed to scan card';
-      if (!msg.toLowerCase().includes('cancel')) {
-        Alert.alert('NFC Notice', msg);
-      }
-    }
-  };
-
-
   const signOutUser = async () => {
     try {
-      // Sign out from Firebase
       await auth().signOut();
-      // Sign out from Google
       await GoogleSignin.signOut();
-      navigation.replace('Login');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
       console.log('User signed out from Firebase and Google');
     } catch (error) {
       console.error('Sign-out Error:', error);
     }
   };
 
-  const validateForm = () => {
-
-    let validationErrors: Card = {
-      ownerName: '',
-      bankName: '',
-      number: '',
-      month: '',
-      year: '',
-      cvv: '',
-      name: '',
-      limit: '',
-      key: '',
-      isPersonal: true,
-      email: '',
-    };
-
-    if (isEmpty(card.ownerName)) {
-      validationErrors.ownerName = "Owner name is required";
-    }
-    if (isEmpty(card.bankName)) {
-      validationErrors.bankName = "Please select bank name";
-    }
-    if (isEmpty(card.number) || !/^(\d{4}\s?){3}\d{4}$/.test(card.number) || card.number.length !== 19) {
-      validationErrors.number = "Card number is empty or invalid";
-    }
-    if (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) {
-      validationErrors.month = "Card month is empty or invalid";
-    }
-    if (isEmpty(card.year) || Number(card.year) < new Date().getFullYear() % 100 || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || card.year.length !== 2 ) {
-      validationErrors.year = "Card year is empty or invalid";
-    }
-    if (isEmpty(card.cvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(card.cvv) || card.cvv.length !== 3) {
-      validationErrors.cvv = "CVV is empty or invalid";
-    }
-    if (isEmpty(card.name)) {
-      validationErrors.name = "Card name cannot be empty";
-    }
-    if (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) {
-      validationErrors.limit = "Card limit is empty or invalid";
-    }
-
-    setErrors(validationErrors);
-    setIsFormValid(Object.values(validationErrors).every(value => value === '' || value === true));
-  };
-
-  const handleSubmit = async () => {
+  const handleSaveCard = async (savedCard: Card) => {
     try {
-      if (isFormValid) {
-        console.log('Form submitted successfully!');
-        card.email = auth().currentUser?.email || '';
-        console.log("Card data before encryption:", card);
-        const encryptedData = encryptCardData(card);
-        const cardData = {
-          ownerId: auth().currentUser?.uid,
-          encryptedData,
-          addedAt: serverTimestamp(),
-          isPersonal: card.isPersonal,
-          sharedGroupIds: []  
-        };
+      console.log('Form submitted successfully!');
+      savedCard.email = auth().currentUser?.email || '';
+      console.log("Card data before encryption:", savedCard);
+      const encryptedData = encryptCardData(savedCard);
+      const cardDocData = {
+        ownerId: auth().currentUser?.uid,
+        encryptedData,
+        addedAt: serverTimestamp(),
+        isPersonal: savedCard.isPersonal,
+        sharedGroupIds: [],
+      };
 
-        console.log("Creating/updating card with data:", cardData);
+      console.log("Creating/updating card with data:", cardDocData);
 
-        if (isModelForUpdate.current) {
-          console.log("Updating existing card:", card.key);
-          await updateDoc(doc(db, 'cards', card.key), cardData);
-          isModelForUpdate.current = false;
-        } else {
-          console.log("Creating new card");
-          await addDoc(collection(db, 'cards'), cardData);
-        }
-
-        setIsCardPersonal(card.isPersonal ? 'PRL' : 'GRP');
-        hideModal();
-        resetCardData();
+      if (savedCard.key) {
+        console.log("Updating existing card:", savedCard.key);
+        await updateDoc(doc(db, 'cards', savedCard.key), cardDocData);
       } else {
-        console.log('Form has errors. Please correct them.');
+        console.log("Creating new card");
+        await addDoc(collection(db, 'cards'), cardDocData);
       }
+
+      setIsCardPersonal(savedCard.isPersonal ? 'PRL' : 'GRP');
+      hideModal();
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
+      console.error('Error in handleSaveCard:', error);
       setLoadingScreen("Error saving card.");
     }
   };
 
-  const handleBlur = (field: keyof Card) => {
-    setTouched((prevState) => ({ ...prevState, [field]: true }));
-  };
-
   const saveCardsInSecureStorage = async (cards: Card[]) => {
     try {
-      const jsonValue = JSON.stringify(cards); // Convert array to JSON string
+      const jsonValue = JSON.stringify(cards);
       await EncryptedStorage.setItem('cards', jsonValue);
       console.log('Cards saved successfully');
     } catch (e) {
@@ -416,9 +252,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
         try {
           const parsedData: unknown = JSON.parse(jsonValue);
           if (Array.isArray(parsedData)) {
-            const cards = parsedData as Card[]; // Cast to Card[]
-            console.log('Cards retrieved successfully:', cards);
-            return cards;
+            console.log('Cards retrieved successfully:', parsedData);
+            return parsedData as Card[];
           } else {
             console.warn('Data retrieved is not in expected format:', parsedData);
           }
@@ -433,195 +268,25 @@ const Home: React.FC<Props> = ({ navigation }) => {
     } finally {
       setLoadingScreen("No cards found.");
     }
-    // Return an empty array as a fallback
     return [];
+  };
+
+  const fetchCardsFromStorage = async () => {
+    const cards = await getCardsFromSecureStorage();
+    if (cards.length > 0) {
+      setCardData(cards);
+    }
   };
 
   return (
     <SafeAreaView style={styles.mainContainer}>
       <View style={{ flex: 1 }}>
-        <Portal>
-          <Modal visible={modalVisible} onDismiss={hideModal} contentContainerStyle={styles.containerStyle}>
-            <Text style={styles.modelTitle} variant="headlineMedium">{`${isModelForUpdate.current ? 'Update your' : 'Add new'} card.`}</Text>
-            {!isModelForUpdate.current && (
-              <Button
-                icon="nfc"
-                mode="contained"
-                onPress={handleNfcScan}
-                style={styles.nfcScanButton}
-                labelStyle={{ color: 'white', fontWeight: 'bold' }}
-              >
-                Scan with NFC (Tap card on phone)
-              </Button>
-            )}
-            <ScrollView>
-              <View style={[styles.formElements, { marginBottom: 10 }]} >
-                <Menu
-                  contentStyle={{ backgroundColor: 'white' }}
-                  visible={dropDownVisible}
-                  onDismiss={closeMenu}
-                  anchor={<Button onPress={openMenu} style={styles.dropDownButton} labelStyle={{ color: 'white', width: '100%' }}>{BANK_DICTIONARY[card.bankName] ?? "Select Bank"}</Button>}>
-                  {
-                    Object.keys(BANK_DICTIONARY).map((item, index) => (
-                      <Menu.Item onPress={() => (setCard({ ...card, bankName: item }), closeMenu())} title={BANK_DICTIONARY[item]} key={index} />
-                    ))
-                  }
-                </Menu>
-              </View>
-              {
-                touched.bankName && isEmpty(card.bankName) &&
-                <HelperText type="error">
-                  {errors.bankName}
-                </HelperText>
-              }
-              <TextInput
-                label="Card owner name"
-                value={card.ownerName}
-                placeholder="Name printed on your card"
-                onChangeText={text => setCard({ ...card, ownerName: text })}
-                mode="outlined"
-                onBlur={() => handleBlur('ownerName')}
-                style={[styles.formElements]}
-              />
-              {
-                touched.ownerName && isEmpty(card.ownerName) &&
-                <HelperText type="error">
-                  {errors.ownerName}
-                </HelperText>
-              }
-              <TextInput
-                label="Card Number"
-                value={card.number}
-                placeholder="0000 0000 0000 0000"
-                onChangeText={text => setCard({ ...card, number: formatCardNumber(text) })}
-                maxLength={19}
-                keyboardType="numeric"
-                mode="outlined"
-                onBlur={() => handleBlur('number')}
-                style={styles.formElements}
-              />
-              {
-                touched.number && (card.number.length === 0 || !/^(\d{4}\s?){3}\d{4}$/.test(card.number) || card.number.length !== 19) &&
-                <HelperText type="error">
-                  {errors.number}
-                </HelperText>
-              }
-
-              <TextInput
-                label="Expiry month"
-                placeholder="00"
-                value={card.month}
-                onChangeText={text => setCard({ ...card, month: text })}
-                maxLength={2}
-                keyboardType="numeric"
-                mode="outlined"
-                onBlur={() => handleBlur('month')}
-                style={styles.formElements}
-              />
-              {
-                touched.month && (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) &&
-                <HelperText type="error">
-                  {errors.month}
-                </HelperText>
-              }
-              <TextInput
-                label="Expiry year"
-                placeholder="00"
-                value={card.year}
-                onChangeText={text => setCard({ ...card, year: text })}
-                maxLength={2}
-                keyboardType="numeric"
-                mode="outlined"
-                onBlur={() => handleBlur('year')}
-                style={styles.formElements}
-              />
-              {
-                touched.year && (isEmpty(card.year) || !/^(?:[1-9]|[1-9][0-9])$/.test(card.year) || Number(card.year) < new Date().getFullYear() % 100 || card.year.length !== 2) &&
-                <HelperText type="error">
-                  {errors.year}
-                </HelperText>
-              }
-              <TextInput
-                label="CVV"
-                placeholder="000"
-                value={card.cvv}
-                onChangeText={text => setCard({ ...card, cvv: text })}
-                maxLength={3}
-                keyboardType="numeric"
-                mode="outlined"
-                onBlur={() => handleBlur('cvv')}
-                style={styles.formElements}
-              />
-              {
-                touched.cvv && (isEmpty(card.cvv) || !/^(?!0)([1-9][0-9]{0,2})$/.test(card.cvv) || card.cvv.length !== 3) &&
-                <HelperText type="error">
-                  {errors.cvv}
-                </HelperText>
-              }
-              <TextInput
-                style={styles.formElements}
-                label="Card name"
-                placeholder="Type/name of card"
-                value={card.name}
-                onChangeText={text => setCard({ ...card, name: text })}
-                mode="outlined"
-                onBlur={() => handleBlur('name')}
-              />
-              {
-                touched.name && isEmpty(card.name) &&
-                <HelperText type="error">
-                  {errors.name}
-                </HelperText>
-              }
-              <TextInput
-                label="Limit"
-                placeholder="Your credit card limit"
-                value={card.limit}
-                onChangeText={text => setCard({ ...card, limit: text })}
-                maxLength={12}
-                keyboardType="numeric"
-                mode="outlined"
-                onBlur={() => handleBlur('limit')}
-                style={styles.formElements}
-              />
-              {
-                touched.limit && (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) &&
-                <HelperText type="error">
-                  {errors.limit}
-                </HelperText>
-              }
-              <View style={{ flexDirection: 'row', alignSelf: 'flex-end' }}>
-                <Text style={{ marginVertical: 10, fontWeight: 'bold' }}>{'Share with group'}</Text>
-                <Switch value={!card.isPersonal} onValueChange={value => setCard({ ...card, isPersonal: !value })} style={{ marginStart: 10 }} />
-              </View>
-              <Button icon="send-circle" mode="contained" onTouchEnd={handleSubmit} disabled={!isFormValid} style={styles.button}              >
-                Submit
-              </Button>
-            </ScrollView>
-          </Modal>
-
-          <Modal
-            visible={nfcScanning}
-            onDismiss={stopNfcScan}
-            contentContainerStyle={styles.nfcModalContent}
-          >
-            <View style={{ alignItems: 'center', padding: 10 }}>
-              <Icon source="nfc" size={64} color="#0066cc" />
-              <Text variant="headlineSmall" style={styles.nfcModalTitle}>
-                Ready to Scan
-              </Text>
-              <Text style={styles.nfcModalDescription}>
-                Hold your contactless credit/debit card firmly near the back of your phone.
-              </Text>
-              {nfcStatusText ? (
-                <Text style={styles.nfcStatus}>{nfcStatusText}</Text>
-              ) : null}
-              <Button mode="outlined" onPress={stopNfcScan} style={{ marginTop: 24, width: '80%' }}>
-                Cancel
-              </Button>
-            </View>
-          </Modal>
-        </Portal>
+        <CardFormModal
+          visible={modalVisible}
+          onDismiss={hideModal}
+          cardToEdit={cardToEdit}
+          onSubmit={handleSaveCard}
+        />
 
         <Searchbar
           placeholder="Search"
@@ -629,95 +294,79 @@ const Home: React.FC<Props> = ({ navigation }) => {
           value={searchQuery}
           style={styles.searchBar}
           inputStyle={{ color: 'white' }}
-          iconColor='white'
-          placeholderTextColor='white'
+          iconColor="white"
+          placeholderTextColor="white"
           selectionColor="white"
         />
 
         <FlatList
-          data={filteredCards.filter((card) => (isCardPersonal === 'PRL' ? (card.isPersonal && card.email === auth().currentUser?.email) : (!card.isPersonal)))}
-          renderItem={({ item }) => (<CustomCard cardDetails={item} onCardLongPress={showModal}></CustomCard>)}
-          keyExtractor={(item, index) => index.toString()}
+          data={filteredCards.filter((card) =>
+            isCardPersonal === 'PRL'
+              ? card.isPersonal && card.email === auth().currentUser?.email
+              : !card.isPersonal
+          )}
+          renderItem={({ item }) => (
+            <CustomCard cardDetails={item} onCardLongPress={showModal} />
+          )}
+          keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
-          ListEmptyComponent={<View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 20 }}>{loadingScreen}</Text></View>}
+          ListEmptyComponent={
+            <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 20 }}>{loadingScreen}</Text>
+            </View>
+          }
         />
+
         <SegmentedButtons
           value={isCardPersonal}
           onValueChange={setIsCardPersonal}
-          buttons={
-            [{
+          buttons={[
+            {
               value: 'GRP',
               label: 'Group',
               style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#ffffff' },
-              checkedColor: '#ffffff'
+              checkedColor: '#ffffff',
             },
             {
               value: 'PRL',
               label: 'Personal',
               style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#ffffff' },
-              checkedColor: '#ffffff'
+              checkedColor: '#ffffff',
             },
-            ]}
+          ]}
           style={{ marginVertical: 10, marginHorizontal: 10 }}
         />
+
         <FAB
           visible={isConnected}
           icon="plus"
           style={styles.fab}
           color="white"
           onPress={() => {
-            showModal(card)
+            showModal();
           }}
         />
       </View>
     </SafeAreaView>
-  )
-}
+  );
+};
 
-export default Home
+export default Home;
 
 const styles = StyleSheet.create({
   mainContainer: {
     backgroundColor: 'white',
-    flex: 1
+    flex: 1,
   },
   fab: {
     backgroundColor: '#1B1B1B',
-    color: 'black',
+    color: 'white',
     margin: 10,
     borderRadius: 30,
     bottom: 80,
     right: 10,
     position: 'absolute',
-  },
-  containerStyle: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginHorizontal: 10,
-    marginBottom: 100,
-    marginTop: 10,
-    borderRadius: 10
-  },
-  modelTitle: {
-    fontSize: 22,
-    alignSelf: 'center',
-    marginHorizontal: 10,
-    marginBottom: 10,
-    color: 'black'
-  },
-  formElements: {
-    marginVertical: 2,
-    backgroundColor: 'white'
-  },
-  button: {
-    marginVertical: 6,
-  },
-  menuButton: {
-
-  },
-  dropDownButton: {
-    backgroundColor: 'black',
   },
   searchBar: {
     marginHorizontal: 10,
@@ -725,36 +374,5 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     elevation: 2,
     backgroundColor: 'black',
-    color: 'white',
   },
-  nfcScanButton: {
-    backgroundColor: '#0066cc',
-    marginBottom: 12,
-    borderRadius: 8,
-  },
-  nfcModalContent: {
-    backgroundColor: 'white',
-    padding: 24,
-    marginHorizontal: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  nfcModalTitle: {
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 8,
-    color: 'black',
-  },
-  nfcModalDescription: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  nfcStatus: {
-    marginTop: 12,
-    color: '#0066cc',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-})
+});
