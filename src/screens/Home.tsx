@@ -58,12 +58,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
   );
 
   const personalCardsWithGroups = useMemo<Card[]>(() => {
-    return cardData.map((card) => ({
-      ...card,
-      accessGroupNames: (card.sharedGroupIds || [])
-        .map((gid) => groupNameById[gid])
-        .filter(Boolean),
-    }));
+    return cardData.map((card) => {
+      const gnames = (card.sharedGroupIds || []).map(
+        (gid) => groupNameById[gid] || 'Group'
+      );
+      return {
+        ...card,
+        accessGroupNames: gnames,
+      };
+    });
   }, [cardData, groupNameById]);
 
   const sourceCards: Card[] = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;

@@ -1,4 +1,4 @@
-import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, Alert } from 'react-native'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, Alert, ScrollView } from 'react-native'
 import React, { useContext, useState } from 'react'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
@@ -33,11 +33,13 @@ const CustomCard: React.FC<CardProps> = ({
   showYourCardLabel,
 }) => {
   const [visible, setVisible] = useState(false);
+  const [sharedGroupsVisible, setSharedGroupsVisible] = useState(false);
   const [copiedField, setCopiedField] = useState<'number' | 'card' | null>(null);
   const isConnected = useContext(ConnectivityContext).isConnected;
 
   const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
+  const hideSharedGroups = () => setSharedGroupsVisible(false);
 
   const handleEdit = () => {
     if (!isConnected) {
@@ -120,6 +122,16 @@ const CustomCard: React.FC<CardProps> = ({
   };
 
   const limitFormatted = formatCardLimit(cardDetails.limit);
+
+  const groupNames = (cardDetails.accessGroupNames && cardDetails.accessGroupNames.length > 0)
+    ? cardDetails.accessGroupNames
+    : (cardDetails.sharedGroupIds || []).map((_, i) => `Group ${i + 1}`);
+
+  const sharedGroupCount = cardDetails.sharedGroupIds?.length || (cardDetails.accessGroupNames?.length || 0);
+
+  const hasLeftElement = isOwner
+    ? sharedGroupCount > 0
+    : Boolean(cardDetails.accessGroupNames?.length);
 
   return (
     <TouchableWithoutFeedback
@@ -283,17 +295,34 @@ const CustomCard: React.FC<CardProps> = ({
           </View>
         </View>
 
-        {!!cardDetails.accessGroupNames?.length && (
-          <View style={styles.accessGroupsContainer}>
-            <Icon source="account-group-outline" size={13} color="rgba(255, 255, 255, 0.85)" />
-            <Text style={styles.accessGroupsText}>
-              via {cardDetails.accessGroupNames.join(', ')}
-            </Text>
-          </View>
-        )}
+        {/* Bottom Row: Shared status or via group on left, Copy Card on right (same line) */}
+        <View style={[styles.cardBottomRow, !hasLeftElement && { justifyContent: 'center' }]}>
+          {hasLeftElement && (
+            isOwner ? (
+              <TouchableOpacity
+                style={styles.sharedBadgeBtn}
+                onPress={() => setSharedGroupsVisible(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon source="account-group-outline" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Text style={styles.sharedBadgeText}>Shared ({sharedGroupCount})</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.accessGroupsContainer}
+                onPress={() => setSharedGroupsVisible(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon source="account-group-outline" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Text style={styles.accessGroupsText} numberOfLines={1}>
+                  via {cardDetails.accessGroupNames?.join(', ')}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
 
-        {/* Copy Card Option at Bottom Center */}
-        <View style={styles.bottomCenterContainer}>
           <TouchableOpacity
             style={[
               styles.copyCardBtn,
@@ -315,6 +344,52 @@ const CustomCard: React.FC<CardProps> = ({
 
         {/* Modern Delete Confirmation Dialog */}
         <Portal>
+          {/* Shared Groups Popup Dialog */}
+          <Dialog
+            visible={sharedGroupsVisible}
+            onDismiss={hideSharedGroups}
+            style={styles.groupsDialog}
+          >
+            <View style={styles.groupsDialogBody}>
+              <View style={styles.groupsDialogHeader}>
+                <View style={styles.groupsDialogIconContainer}>
+                  <Icon source="account-group" size={20} color="#111111" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupsDialogTitle}>Shared Groups</Text>
+                  <Text style={styles.groupsDialogSubtitle} numberOfLines={1}>
+                    {cardDetails.ownerName ? `${cardDetails.ownerName} • ` : ''}{BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName || 'Card'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.groupsDialogMessage}>
+                This card is currently shared with {sharedGroupCount} {sharedGroupCount === 1 ? 'group' : 'groups'}:
+              </Text>
+
+              <ScrollView style={styles.groupsListContainer} bounces={false}>
+                {groupNames.map((name, index) => (
+                  <View key={`${name}-${index}`} style={styles.groupItemRow}>
+                    <View style={styles.groupItemIcon}>
+                      <Icon source="account-group-outline" size={15} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.groupItemText} numberOfLines={1}>
+                      {name}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.groupsDialogCloseBtn}
+                onPress={hideSharedGroups}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.groupsDialogCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </Dialog>
+
           <Dialog
             visible={visible}
             onDismiss={hideDialog}
@@ -415,16 +490,33 @@ const styles = StyleSheet.create({
     fontSize: 9,
     textTransform: 'uppercase',
   },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  sharedBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sharedBadgeText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   accessGroupsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 6,
-    paddingHorizontal: 2,
+    gap: 4,
+    flex: 1,
+    marginRight: 8,
   },
   accessGroupsText: {
     color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
@@ -493,11 +585,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginStart: 6,
   },
-  bottomCenterContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
+
   copyCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -636,6 +724,88 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   confirmDeleteBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  groupsDialog: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginHorizontal: 24,
+  },
+  groupsDialogBody: {
+    width: '100%',
+  },
+  groupsDialogHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  groupsDialogIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupsDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  groupsDialogSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  groupsDialogMessage: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  groupsListContainer: {
+    maxHeight: 220,
+    marginBottom: 16,
+  },
+  groupItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    gap: 10,
+  },
+  groupItemIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupItemText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+    flex: 1,
+  },
+  groupsDialogCloseBtn: {
+    backgroundColor: '#111111',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupsDialogCloseText: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
