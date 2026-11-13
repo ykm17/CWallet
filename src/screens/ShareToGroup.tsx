@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -127,7 +127,10 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const savingRef = useRef(false);
+
   const handleShare = async () => {
+    if (saving || savingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to share cards with groups.');
       return;
@@ -165,7 +168,9 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
         {
           text: 'Share',
           onPress: async () => {
+            if (savingRef.current) return;
             try {
+              savingRef.current = true;
               setSaving(true);
               const result = await shareCardsWithGroups(selectedCardIds, selectedGroupIds);
               Alert.alert(
@@ -176,6 +181,7 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
             } catch (error: any) {
               Alert.alert('Could not share cards', error.message || 'Please try again.');
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },

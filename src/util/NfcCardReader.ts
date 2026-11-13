@@ -11,6 +11,8 @@ export interface ScannedCardData {
   cardType?: string;
 }
 
+export type NfcScanStage = 'ready' | 'card_detected' | 'reading' | 'validating' | 'success';
+
 // Convert byte array to hexadecimal string
 const bytesToHex = (bytes: number[]): string => {
   return bytes
@@ -49,12 +51,7 @@ const isValidLuhn = (pan: string): boolean => {
   return sum % 10 === 0;
 };
 
-// Strict BER-TLV Parser: parses TLV structures accurately without false positives
-interface TLVNode {
-  tag: string;
-  value: number[];
-}
-
+// Strict BER-TLV Parser: parses TLV structures accurately
 const parseBERTLV = (bytes: number[]): Map<string, number[]> => {
   const map = new Map<string, number[]>();
 
@@ -122,23 +119,88 @@ const parseBERTLV = (bytes: number[]): Map<string, number[]> => {
   return map;
 };
 
-// Common EMV Application Identifiers (AIDs)
+// Extract all AIDs (tag 4F) found anywhere in byte stream
+const extractAllAIDs = (bytes: number[]): string[] => {
+  const aids: string[] = [];
+  let i = 0;
+  while (i < bytes.length - 2) {
+    if ((bytes[i] & 0xff) === 0x4f) {
+      const len = bytes[i + 1] & 0xff;
+      if (len >= 5 && len <= 16 && i + 2 + len <= bytes.length) {
+        const aidHex = bytesToHex(bytes.slice(i + 2, i + 2 + len));
+        if (!aids.includes(aidHex)) {
+          aids.push(aidHex);
+        }
+      }
+    }
+    i++;
+  }
+  return aids;
+};
+
+// Comprehensive list of EMV Application Identifiers (AIDs)
 const KNOWN_AIDS = [
-  'A0000000031010',   // Visa Credit/Debit
-  'A0000000041010',   // Mastercard Credit/Debit
+  'A0000000031010',   // Visa Credit / Debit
+  'A0000000041010',   // Mastercard Credit / Debit
   'A0000000032010',   // Visa Electron
-  'A000000005241010', // RuPay Credit/Debit
+  'A000000005241010', // RuPay Credit / Debit (Format 1)
+  'A0000005241010',   // RuPay (Format 2)
+  'A0000005241021',   // RuPay Prepaid
   'A00000002501',     // American Express
-  'A0000000043060',   // Maestro
-  'A0000001523010',   // Discover
+  'A000000025010402', // Amex ExpressPay
+  'A000000025010701', // Amex Alternate
+  'A0000000042203',   // Maestro Debit
+  'A0000000043060',   // Maestro UK
+  'A0000001523010',   // Discover / Diners Club
+  'A0000000651010',   // JCB
+  'A000000333010101', // UnionPay Debit
+  'A000000333010102', // UnionPay Credit
+  'A0000000033010',   // Interlink
 ];
 
-// PPSE Command: SELECT '2PAY.SYS.DDF01'
+// PPSE Command: SELECT '2PAY.SYS.DDF01' (Contactless payment directory)
 const PPSE_COMMAND = [
   0x00, 0xa4, 0x04, 0x00, 0x0e,
   0x32, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31,
   0x00,
 ];
+
+// Fallback PSE: SELECT '1PAY.SYS.DDF01' (Standard payment directory)
+const PSE_COMMAND = [
+  0x00, 0xa4, 0x04, 0x00, 0x0e,
+  0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31,
+  0x00,
+];
+
+// Transceive with ISO 7816-4 error handling (handles 61 XX GET RESPONSE and 6C XX correct Le)
+const transceiveIsoDep = async (command: number[]): Promise<number[]> => {
+  let resp = await NfcManager.isoDepHandler.transceive(command);
+  if (!resp || resp.length < 2) return resp || [];
+
+  const sw1 = resp[resp.length - 2] & 0xff;
+  const sw2 = resp[resp.length - 1] & 0xff;
+
+  // SW1 = 0x6C: Reissue command with correct Le = sw2
+  if (sw1 === 0x6c) {
+    const fixedCmd = [...command.slice(0, command.length - 1), sw2];
+    resp = await NfcManager.isoDepHandler.transceive(fixedCmd);
+  }
+
+  // SW1 = 0x61: Issue GET RESPONSE command (00 C0 00 00 sw2)
+  if (resp.length >= 2) {
+    const s1 = resp[resp.length - 2] & 0xff;
+    const s2 = resp[resp.length - 1] & 0xff;
+    if (s1 === 0x61 && s2 > 0) {
+      const getResponseCmd = [0x00, 0xc0, 0x00, 0x00, s2];
+      const getResp = await NfcManager.isoDepHandler.transceive(getResponseCmd);
+      if (getResp && getResp.length > 2) {
+        return getResp;
+      }
+    }
+  }
+
+  return resp;
+};
 
 // Detect card branding
 export const detectCardName = (pan: string, label: string = ''): string => {
@@ -162,6 +224,8 @@ export const detectCardName = (pan: string, label: string = ''): string => {
   if (/^(60|65|81|82|508)/.test(cleanPan)) return 'RuPay Card';
   if (/^(34|37)/.test(cleanPan)) return 'American Express';
   if (/^(30[0-5]|3095|36|38|39)/.test(cleanPan)) return 'Diners Club';
+  if (/^35/.test(cleanPan)) return 'JCB Card';
+  if (/^62/.test(cleanPan)) return 'UnionPay';
   return 'Credit Card';
 };
 
@@ -184,7 +248,6 @@ const buildGPOCommand = (pdolBytes?: number[]): number[] => {
     return [0x80, 0xa8, 0x00, 0x00, 0x02, 0x83, 0x00, 0x00];
   }
 
-  // Parse PDOL tag-length pairs
   let i = 0;
   const terminalData: number[] = [];
 
@@ -206,13 +269,13 @@ const buildGPOCommand = (pdolBytes?: number[]): number[] => {
 
     // Fill appropriate terminal data for each requested PDOL tag
     if (tagHex === '9F66') {
-      // Terminal Transaction Qualifiers (TTQ): contactless MSD and qVSDC capable
+      // Terminal Transaction Qualifiers (TTQ): contactless MSD, qVSDC, and EMV capable
       const ttq = [0x28, 0x00, 0x00, 0x00];
       for (let k = 0; k < len; k++) {
         terminalData.push(k < ttq.length ? ttq[k] : 0x00);
       }
     } else if (tagHex === '9F1A' || tagHex === '5F2A') {
-      // Terminal Country Code / Currency Code (0356 for India, or 0840)
+      // Terminal Country Code / Currency Code (India: 0356)
       const code = [0x03, 0x56];
       for (let k = 0; k < len; k++) {
         terminalData.push(k < code.length ? code[k] : 0x00);
@@ -228,6 +291,11 @@ const buildGPOCommand = (pdolBytes?: number[]): number[] => {
         ((Math.floor(mm / 10) << 4) | (mm % 10)) & 0xff,
         ((Math.floor(dd / 10) << 4) | (dd % 10)) & 0xff,
       );
+    } else if (tagHex === '9F37') {
+      // Unpredictable Number
+      for (let k = 0; k < len; k++) {
+        terminalData.push((Math.floor(Math.random() * 256)) & 0xff);
+      }
     } else {
       // Default: zero bytes of the requested length
       for (let k = 0; k < len; k++) {
@@ -279,7 +347,7 @@ const extractDetailsFromTLVMap = (
   const track2Bytes = tlvMap.get('57') || tlvMap.get('9F6B');
   if (track2Bytes) {
     const track2Hex = bytesToHex(track2Bytes);
-    // Format: PAN + 'D' + YYMM + ...
+    // Format: PAN + 'D' or '=' + YYMM + ...
     const match = track2Hex.match(/([0-9]{13,19})[D=]([0-9]{2})([0-9]{2})/i);
     if (match) {
       const candidatePan = match[1];
@@ -291,7 +359,7 @@ const extractDetailsFromTLVMap = (
     }
   }
 
-  // 2. Application PAN (Tag 5A) - only accept if valid Luhn
+  // 2. Application PAN (Tag 5A)
   if (!result.cardNumber && tlvMap.has('5A')) {
     const panHex = bytesToHex(tlvMap.get('5A')!).replace(/[Ff]$/, '');
     if (/^\d{13,19}$/.test(panHex) && isValidLuhn(panHex)) {
@@ -315,7 +383,7 @@ const extractDetailsFromTLVMap = (
 
   // 4. Cardholder Name (Tag 5F20)
   if (!result.ownerName && tlvMap.has('5F20')) {
-    const name = bytesToAscii(tlvMap.get('5F20')!).replace('/', ' ').trim();
+    const name = bytesToAscii(tlvMap.get('5F20')!).replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
     if (name.length >= 2 && !/^\d+$/.test(name)) {
       result.ownerName = name;
     }
@@ -362,7 +430,7 @@ export const goToNfcSettings = async (): Promise<void> => {
   }
 };
 
-// Cancel ongoing NFC scan
+// Cancel ongoing NFC scan safely
 export const cancelNfcScan = async (): Promise<void> => {
   try {
     await NfcManager.cancelTechnologyRequest();
@@ -371,8 +439,10 @@ export const cancelNfcScan = async (): Promise<void> => {
   }
 };
 
-// Scan contactless EMV card and return validated card details
-export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
+// Scan contactless EMV card with progress reporting and robust multi-protocol reading
+export const scanCardWithNfc = async (
+  onStageChange?: (stage: NfcScanStage, message: string) => void,
+): Promise<ScannedCardData> => {
   const supported = await isNfcSupported();
   if (!supported) {
     throw new Error('NFC is not supported on this device.');
@@ -386,38 +456,57 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
   await NfcManager.start();
 
   try {
+    onStageChange?.('ready', 'Hold card flat against the back of your phone...');
+
+    // Request IsoDep technology (EMV contactless standard: ISO 14443-4)
     await NfcManager.requestTechnology(NfcTech.IsoDep);
+
+    onStageChange?.('card_detected', 'Card detected! Keep it steady...');
 
     let collectedData: Partial<ScannedCardData> = {};
 
-    // Step 1: Select PPSE (2PAY.SYS.DDF01) to discover active AIDs on card
+    // Step 1: Select PPSE (2PAY.SYS.DDF01) to discover active payment apps on card
     let aidsToTry: string[] = [];
     try {
-      const ppseResp = await NfcManager.isoDepHandler.transceive(PPSE_COMMAND);
-      const ppseMap = parseBERTLV(ppseResp);
-      // Extract AID from Tag 4F
-      if (ppseMap.has('4F')) {
-        aidsToTry.push(bytesToHex(ppseMap.get('4F')!));
+      const ppseResp = await transceiveIsoDep(PPSE_COMMAND);
+      if (ppseResp && ppseResp.length > 2) {
+        const foundAids = extractAllAIDs(ppseResp);
+        for (const aid of foundAids) {
+          if (!aidsToTry.includes(aid)) aidsToTry.push(aid);
+        }
       }
     } catch {
-      // PPSE not available, use known AIDs
+      // If PPSE fails, try standard PSE (1PAY.SYS.DDF01)
+      try {
+        const pseResp = await transceiveIsoDep(PSE_COMMAND);
+        if (pseResp && pseResp.length > 2) {
+          const foundAids = extractAllAIDs(pseResp);
+          for (const aid of foundAids) {
+            if (!aidsToTry.includes(aid)) aidsToTry.push(aid);
+          }
+        }
+      } catch {
+        // Fallback to known AIDs
+      }
     }
 
-    // Include all known AIDs
+    // Append known standard AIDs if not already discovered
     for (const aid of KNOWN_AIDS) {
       if (!aidsToTry.includes(aid)) {
         aidsToTry.push(aid);
       }
     }
 
-    // Step 2: Traverse AIDs and interact with payment application
+    onStageChange?.('reading', 'Reading card applications...');
+
+    // Step 2: Iterate over discovered and known AIDs
     for (const aid of aidsToTry) {
       try {
         const aidBytes = hexToBytes(aid);
         const selectAidCmd = [0x00, 0xa4, 0x04, 0x00, aidBytes.length, ...aidBytes, 0x00];
-        const selectResp = await NfcManager.isoDepHandler.transceive(selectAidCmd);
+        const selectResp = await transceiveIsoDep(selectAidCmd);
 
-        // Check SW1-SW2 (90 00 or 61 xx indicates success)
+        // Check SW1-SW2
         const sw1 = selectResp.length >= 2 ? selectResp[selectResp.length - 2] : 0;
         const sw2 = selectResp.length >= 1 ? selectResp[selectResp.length - 1] : 0;
         const isSuccess = (sw1 === 0x90 && sw2 === 0x00) || sw1 === 0x61;
@@ -431,18 +520,17 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
         collectedData = extractDetailsFromTLVMap(fciMap, collectedData);
 
         // Step 3: Get Processing Options (GPO)
-        // Check if card requires specific PDOL data (Tag 9F38)
         const pdolBytes = fciMap.get('9F38');
         let gpoCmd = buildGPOCommand(pdolBytes);
         let gpoResp: number[] = [];
 
         try {
-          gpoResp = await NfcManager.isoDepHandler.transceive(gpoCmd);
+          gpoResp = await transceiveIsoDep(gpoCmd);
         } catch {
-          // If PDOL failed, fallback to standard empty PDOL
+          // If PDOL failed, fallback to standard empty PDOL (80 A8 00 00 02 83 00 00)
           try {
             gpoCmd = [0x80, 0xa8, 0x00, 0x00, 0x02, 0x83, 0x00, 0x00];
-            gpoResp = await NfcManager.isoDepHandler.transceive(gpoCmd);
+            gpoResp = await transceiveIsoDep(gpoCmd);
           } catch {
             // Ignore GPO failure
           }
@@ -465,8 +553,8 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
             }
           }
         } else {
-          // Fallback: Read common SFIs (1, 2, 3) and records (1 to 5)
-          for (let s = 1; s <= 3; s++) {
+          // Fallback: Read common SFIs (1, 2, 3, 4) and records (1 to 5)
+          for (let s = 1; s <= 4; s++) {
             for (let r = 1; r <= 5; r++) {
               recordsToRead.push({ sfi: s, rec: r });
             }
@@ -476,13 +564,13 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
         for (const { sfi, rec } of recordsToRead) {
           try {
             const readCmd = [0x00, 0xb2, rec, (sfi << 3) | 4, 0x00];
-            const recResp = await NfcManager.isoDepHandler.transceive(readCmd);
+            const recResp = await transceiveIsoDep(readCmd);
 
             if (recResp.length > 2) {
               const recMap = parseBERTLV(recResp);
               collectedData = extractDetailsFromTLVMap(recMap, collectedData);
 
-              // Stop if all core fields have been found and validated
+              // Stop early if all core fields have been found and validated
               if (
                 collectedData.cardNumber &&
                 collectedData.expiryMonth &&
@@ -493,16 +581,19 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
               }
             }
           } catch {
-            // Ignore record read error
+            // Ignore record read error and continue with next record
           }
         }
 
         // Validate collected card number with Luhn algorithm
         if (collectedData.cardNumber && isValidLuhn(collectedData.cardNumber)) {
+          onStageChange?.('validating', 'Card recognized! Validating details...');
           const rawLabel = collectedData.cardName || '';
           const detectedCardName = detectCardName(collectedData.cardNumber, rawLabel);
           const detectedNetwork = detectCardNetwork(collectedData.cardNumber, rawLabel);
           const detectedType = detectCardType(rawLabel);
+
+          onStageChange?.('success', 'Card details captured!');
 
           return {
             cardNumber: collectedData.cardNumber,
@@ -520,7 +611,7 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
     }
 
     throw new Error(
-      'Could not read valid card details. Please ensure the card is contactless and hold it flat against the back of your phone for 2-3 seconds.'
+      'Could not read card details. Please ensure the card has contactless / RFID payment enabled, remove any thick phone case, and hold the card still against the top-back of your device.'
     );
   } finally {
     await cancelNfcScan();

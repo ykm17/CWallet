@@ -1,6 +1,6 @@
 import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert } from '../components/CustomAlert';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
@@ -236,8 +236,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const savingCardRef = useRef(false);
+
   const handleSaveCard = async (savedCard: Card) => {
+    if (savingCardRef.current) return;
     try {
+      savingCardRef.current = true;
       console.log('Form submitted successfully!');
       savedCard.email = auth().currentUser?.email || '';
       console.log("Card data before encryption:", savedCard);
@@ -268,6 +272,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
     } catch (error) {
       console.error('Error in handleSaveCard:', error);
       Alert.alert('Save Failed', 'Could not save the card. Please try again.');
+    } finally {
+      savingCardRef.current = false;
     }
   };
 

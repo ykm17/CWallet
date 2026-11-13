@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -44,15 +44,19 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
       .finally(() => setLoading(false));
   }, [groupId, navigation]);
 
+  const savingRef = useRef(false);
+
   const handleSave = async () => {
+    if (saving || savingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to create or update a group.');
       return;
     }
-    if (!name.trim() || saving) {
+    if (!name.trim()) {
       return;
     }
     try {
+      savingRef.current = true;
       setSaving(true);
       if (groupId) {
         await updateGroup(groupId, { name, contributionPermission: permission });
@@ -64,6 +68,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
     } catch (error: any) {
       Alert.alert('Could not save group', error.message || 'Please try again.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -118,7 +123,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
           style={styles.saveButton}
           labelStyle={styles.saveLabel}
         >
-          {isEdit ? 'Save changes' : 'Create group'}
+          {saving ? (isEdit ? 'Saving changes...' : 'Creating group...') : isEdit ? 'Save changes' : 'Create group'}
         </Button>
       </ScrollView>
     </KeyboardAvoidingView>

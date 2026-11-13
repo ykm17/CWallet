@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Alert } from './CustomAlert';
 import { Button, Icon, Modal, Portal, Text } from 'react-native-paper';
@@ -71,7 +71,10 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
     ));
   };
 
+  const savingRef = useRef(false);
+
   const handleSave = async () => {
+    if (savingRef.current || saving) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to update card sharing.');
       return;
@@ -103,7 +106,9 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
         {
           text: 'Save',
           onPress: async () => {
+            if (savingRef.current) return;
             try {
+              savingRef.current = true;
               setSaving(true);
               await syncCardGroupAccess(card.key, selectedGroupIds);
               onShared?.();
@@ -111,6 +116,7 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
             } catch (error: any) {
               Alert.alert('Could not update sharing', error.message || 'Please try again.');
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },

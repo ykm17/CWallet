@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -42,19 +42,23 @@ const Groups: React.FC<Props> = ({ navigation }) => {
     });
   }, [navigation]);
 
+  const leavingRef = useRef(false);
+
   const handleConfirmLeaveGroup = async () => {
-    if (!leaveTarget) return;
+    if (!leaveTarget || leaving || leavingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to leave a group.');
       return;
     }
     try {
+      leavingRef.current = true;
       setLeaving(true);
       await leaveGroup(leaveTarget.groupId);
       setLeaveTarget(null);
     } catch (err: any) {
       Alert.alert('Could not leave group', err.message || 'Please try again.');
     } finally {
+      leavingRef.current = false;
       setLeaving(false);
     }
   };
@@ -172,11 +176,12 @@ const Groups: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, leaving && { opacity: 0.6 }]}
                 onPress={handleConfirmLeaveGroup}
                 disabled={leaving}
                 activeOpacity={0.7}
               >
+                {leaving && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />}
                 <Text style={styles.confirmActionText}>{leaving ? 'Leaving...' : 'Leave group'}</Text>
               </TouchableOpacity>
             </View>

@@ -8,6 +8,9 @@ import {
   useWindowDimensions,
   TouchableOpacity,
   FlatList,
+  Animated,
+  Vibration,
+  ActivityIndicator,
 } from 'react-native';
 import { Alert } from './CustomAlert';
 import {
@@ -25,7 +28,7 @@ import { isEmpty } from 'lodash';
 import { Card } from '../types/Types';
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { formatCardNumber, detectCardNetwork, detectCardType } from '../util/Utils';
-import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan } from '../util/NfcCardReader';
+import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan, NfcScanStage } from '../util/NfcCardReader';
 import { ConnectivityContext } from '../util/Connectivity';
 
 interface CardFormModalProps {
@@ -70,7 +73,48 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   const [typeMenuVisible, setTypeMenuVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [nfcScanning, setNfcScanning] = useState(false);
+  const [nfcStage, setNfcStage] = useState<NfcScanStage>('ready');
   const [nfcStatusText, setNfcStatusText] = useState('');
+  const submittingRef = useRef(false);
+  const nfcScanningRef = useRef(false);
+
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const waveAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (nfcScanning) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 1100,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      const wave = Animated.loop(
+        Animated.timing(waveAnim, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      );
+      pulse.start();
+      wave.start();
+      return () => {
+        pulse.stop();
+        wave.stop();
+      };
+    } else {
+      pulseAnim.setValue(0);
+      waveAnim.setValue(0);
+    }
+  }, [nfcScanning, pulseAnim, waveAnim]);
 
   const isUpdate = Boolean(cardToEdit && cardToEdit.key);
 
@@ -132,24 +176,30 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   };
 
   const stopNfcScan = async () => {
+    nfcScanningRef.current = false;
     setNfcScanning(false);
+    setNfcStage('ready');
     setNfcStatusText('');
     await cancelNfcScan();
   };
 
   const handleNfcScan = async () => {
+    if (nfcScanningRef.current || nfcScanning) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to add or scan cards.');
       return;
     }
     try {
+      nfcScanningRef.current = true;
       const supported = await isNfcSupported();
       if (!supported) {
+        nfcScanningRef.current = false;
         Alert.alert('NFC Not Supported', 'Your device does not support NFC card scanning.');
         return;
       }
       const enabled = await isNfcEnabled();
       if (!enabled) {
+        nfcScanningRef.current = false;
         Alert.alert(
           'NFC Disabled',
           'Please enable NFC in your device settings to scan your contactless card.',
@@ -162,9 +212,18 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       }
 
       setNfcScanning(true);
-      setNfcStatusText('Hold your card close to the back of your phone...');
+      setNfcStage('ready');
+      setNfcStatusText('Hold your card flat against the back of your phone...');
 
-      const scannedData = await scanCardWithNfc();
+      const scannedData = await scanCardWithNfc((stage, message) => {
+        setNfcStage(stage);
+        setNfcStatusText(message);
+        if (stage === 'card_detected') {
+          try { Vibration.vibrate(70); } catch {}
+        } else if (stage === 'success') {
+          try { Vibration.vibrate([0, 50, 50, 50]); } catch {}
+        }
+      });
 
       const updated = {
         ...cardRef.current,
@@ -186,7 +245,9 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
         Alert.alert('NFC Notice', msg);
       }
     } finally {
+      nfcScanningRef.current = false;
       setNfcScanning(false);
+      setNfcStage('ready');
       setNfcStatusText('');
     }
   };
@@ -238,13 +299,15 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       Alert.alert('Offline', 'You must be online to save or edit cards.');
       return;
     }
-    if (!isFormValid || submitting) return;
+    if (!isFormValid || submitting || submittingRef.current) return;
     try {
+      submittingRef.current = true;
       setSubmitting(true);
       await onSubmit({ ...cardRef.current });
     } catch (err) {
       console.error('Error submitting form:', err);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -636,20 +699,148 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
         onDismiss={stopNfcScan}
         contentContainerStyle={styles.nfcModalContent}
       >
-        <View style={{ alignItems: 'center', padding: 10 }}>
-          <Icon source="nfc" size={64} color="#0066cc" />
-          <Text variant="headlineSmall" style={styles.nfcModalTitle}>
-            Ready to Scan
+        <View style={styles.nfcContainer}>
+          {/* Top Stage Indicators */}
+          <View style={styles.nfcStageRow}>
+            <View style={[styles.nfcStagePill, nfcStage === 'ready' && styles.nfcStagePillActive]}>
+              <Text style={[styles.nfcStagePillText, nfcStage === 'ready' && styles.nfcStagePillTextActive]}>
+                1. Align
+              </Text>
+            </View>
+            <View style={styles.nfcStageDivider} />
+            <View
+              style={[
+                styles.nfcStagePill,
+                (nfcStage === 'card_detected' || nfcStage === 'reading' || nfcStage === 'validating') &&
+                  styles.nfcStagePillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.nfcStagePillText,
+                  (nfcStage === 'card_detected' || nfcStage === 'reading' || nfcStage === 'validating') &&
+                    styles.nfcStagePillTextActive,
+                ]}
+              >
+                2. Hold Steady
+              </Text>
+            </View>
+            <View style={styles.nfcStageDivider} />
+            <View style={[styles.nfcStagePill, nfcStage === 'success' && styles.nfcStagePillActive]}>
+              <Text style={[styles.nfcStagePillText, nfcStage === 'success' && styles.nfcStagePillTextActive]}>
+                3. Done
+              </Text>
+            </View>
+          </View>
+
+          {/* Animated Wave / Radar Area */}
+          <View style={styles.nfcAnimationWrapper}>
+            <Animated.View
+              style={[
+                styles.nfcWaveRing,
+                {
+                  borderColor:
+                    nfcStage === 'card_detected' || nfcStage === 'reading' || nfcStage === 'success'
+                      ? '#10B981'
+                      : '#111111',
+                  transform: [
+                    {
+                      scale: waveAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 2.2],
+                      }),
+                    },
+                  ],
+                  opacity: waveAnim.interpolate({
+                    inputRange: [0, 0.6, 1],
+                    outputRange: [0.5, 0.2, 0],
+                  }),
+                },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.nfcPulseRing,
+                {
+                  backgroundColor:
+                    nfcStage === 'card_detected' || nfcStage === 'reading' || nfcStage === 'success'
+                      ? '#ECFDF5'
+                      : '#F3F4F6',
+                  transform: [
+                    {
+                      scale: pulseAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.95, 1.15],
+                      }),
+                    },
+                  ],
+                  opacity: pulseAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.35, 0.75],
+                  }),
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.nfcCenterBubble,
+                (nfcStage === 'card_detected' || nfcStage === 'reading' || nfcStage === 'success') &&
+                  styles.nfcCenterBubbleSuccess,
+              ]}
+            >
+              {nfcStage === 'reading' || nfcStage === 'validating' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Icon
+                  source={
+                    nfcStage === 'success'
+                      ? 'check-bold'
+                      : nfcStage === 'card_detected'
+                      ? 'credit-card-wireless'
+                      : 'nfc'
+                  }
+                  size={36}
+                  color="#FFFFFF"
+                />
+              )}
+            </View>
+          </View>
+
+          {/* Title & Status */}
+          <Text style={styles.nfcModalTitle}>
+            {nfcStage === 'ready'
+              ? 'Ready to Scan'
+              : nfcStage === 'card_detected'
+              ? 'Card Detected!'
+              : nfcStage === 'reading'
+              ? 'Reading Card...'
+              : nfcStage === 'validating'
+              ? 'Validating Details...'
+              : 'Card Scanned!'}
           </Text>
+
           <Text style={styles.nfcModalDescription}>
-            Hold your contactless credit/debit card firmly near the back of your phone.
+            {nfcStatusText ||
+              'Hold your contactless credit or debit card flat against the upper back of your phone and keep it still.'}
           </Text>
-          {nfcStatusText ? (
-            <Text style={styles.nfcStatus}>{nfcStatusText}</Text>
-          ) : null}
-          <Button mode="outlined" onPress={stopNfcScan} style={{ marginTop: 24, width: '80%' }}>
-            Cancel
-          </Button>
+
+          {/* Guidance tip box */}
+          <View style={styles.nfcTipBox}>
+            <Icon source="lightbulb-on-outline" size={16} color="#4B5563" />
+            <Text style={styles.nfcTipText}>
+              {nfcStage === 'ready'
+                ? 'Tip: NFC sensor is usually near the camera on the back.'
+                : 'Keep card firmly in place until scanning completes.'}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.nfcCancelBtn}
+            onPress={stopNfcScan}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.nfcCancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
       </Modal>
 
@@ -856,27 +1047,132 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   nfcModalContent: {
-    backgroundColor: 'white',
-    padding: 24,
-    marginHorizontal: 24,
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    marginHorizontal: 20,
+    borderRadius: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  nfcContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  nfcStageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  nfcStagePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  nfcStagePillActive: {
+    backgroundColor: '#111111',
+  },
+  nfcStagePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  nfcStagePillTextActive: {
+    color: '#FFFFFF',
+  },
+  nfcStageDivider: {
+    width: 12,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 4,
+  },
+  nfcAnimationWrapper: {
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  nfcWaveRing: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+  },
+  nfcPulseRing: {
+    position: 'absolute',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+  },
+  nfcCenterBubble: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#111111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  nfcCenterBubbleSuccess: {
+    backgroundColor: '#10B981',
   },
   nfcModalTitle: {
-    marginTop: 12,
-    fontWeight: 'bold',
+    marginTop: 8,
+    fontWeight: '700',
+    fontSize: 18,
+    color: '#111111',
     textAlign: 'center',
   },
   nfcModalDescription: {
-    marginTop: 8,
+    marginTop: 6,
     textAlign: 'center',
-    color: '#666',
+    color: '#4B5563',
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 8,
   },
-  nfcStatus: {
-    marginTop: 12,
-    textAlign: 'center',
-    color: '#0066cc',
-    fontWeight: '500',
+  nfcTipBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 14,
+    width: '100%',
+  },
+  nfcTipText: {
+    fontSize: 11,
+    color: '#6B7280',
+    flex: 1,
+  },
+  nfcCancelBtn: {
+    marginTop: 16,
+    width: '100%',
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nfcCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
   },
   bankSelectorButton: {
     flexDirection: 'row',

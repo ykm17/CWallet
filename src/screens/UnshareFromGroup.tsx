@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -118,7 +118,10 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const savingRef = useRef(false);
+
   const handleUnshare = async () => {
+    if (saving || savingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to unshare cards from groups.');
       return;
@@ -155,7 +158,9 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           text: 'Unshare',
           style: 'destructive',
           onPress: async () => {
+            if (savingRef.current) return;
             try {
+              savingRef.current = true;
               setSaving(true);
               await unshareCardsFromGroups(cardIdsToUnshare, selectedGroupIds);
               Alert.alert(
@@ -166,6 +171,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
             } catch (error: any) {
               Alert.alert('Could not unshare cards', error.message || 'Please try again.');
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },

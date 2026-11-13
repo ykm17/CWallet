@@ -1,5 +1,5 @@
-import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView } from 'react-native'
-import React, { useContext, useState } from 'react'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator } from 'react-native'
+import React, { useContext, useState, useRef } from 'react'
 import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
@@ -79,19 +79,26 @@ const CustomCard: React.FC<CardProps> = ({
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
+
   const handleDelete = async () => {
+    if (deletingRef.current || deleting) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to delete cards.');
       hideDialog();
       return;
     }
     try {
-      if (isConnected) {
-        await deleteOwnedCard(cardDetails.key);
-      }
+      deletingRef.current = true;
+      setDeleting(true);
+      await deleteOwnedCard(cardDetails.key);
       hideDialog();
     } catch (error) {
       console.error('Error deleting card:', error);
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
   };
 
@@ -434,18 +441,24 @@ const CustomCard: React.FC<CardProps> = ({
                 <TouchableOpacity
                   style={styles.cancelBtn}
                   onPress={hideDialog}
+                  disabled={deleting}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.confirmDeleteBtn}
+                  style={[styles.confirmDeleteBtn, deleting && { opacity: 0.6 }]}
                   onPress={handleDelete}
+                  disabled={deleting}
                   activeOpacity={0.7}
                 >
-                  <Icon source="delete" size={15} color="#FFFFFF" />
-                  <Text style={styles.confirmDeleteBtnText}>Delete</Text>
+                  {deleting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
+                  ) : (
+                    <Icon source="delete" size={15} color="#FFFFFF" />
+                  )}
+                  <Text style={styles.confirmDeleteBtnText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
                 </TouchableOpacity>
               </View>
             </View>

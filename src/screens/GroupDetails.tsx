@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, TextInput as RNTextInput, RefreshControl } from 'react-native';
+import React, { useContext, useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, TextInput as RNTextInput, RefreshControl, ActivityIndicator } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper';
@@ -27,10 +27,15 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const [accessCount, setAccessCount] = useState<number | null>(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
   const [tab, setTab] = useState<'cards' | 'members'>('cards');
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [leaveVisible, setLeaveVisible] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
+  const removingMemberRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -122,6 +127,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   }, [groupId, navigation, isOwner]);
 
   const handleAddMember = async () => {
+    if (adding || addingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to add group members.');
       return;
@@ -130,6 +136,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
     try {
+      addingRef.current = true;
       setAdding(true);
       const result = await addMemberToGroup(groupId, memberEmail);
       setMemberEmail('');
@@ -147,11 +154,13 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
     } catch (error: any) {
       Alert.alert('Could not add member', error.message || 'Please try again.');
     } finally {
+      addingRef.current = false;
       setAdding(false);
     }
   };
 
   const handleRemoveMember = (member: GroupMember) => {
+    if (removingMemberRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to remove group members.');
       return;
@@ -165,10 +174,14 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
+            if (removingMemberRef.current) return;
             try {
+              removingMemberRef.current = true;
               await removeMemberFromGroup(groupId, member.userId);
             } catch (error: any) {
               Alert.alert('Could not remove member', error.message);
+            } finally {
+              removingMemberRef.current = false;
             }
           },
         },
@@ -185,32 +198,42 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleDeleteGroup = async () => {
+    if (deleting || deletingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to delete this group.');
       return;
     }
     try {
+      deletingRef.current = true;
+      setDeleting(true);
       await deleteGroup(groupId);
       setDeleteVisible(false);
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Could not delete group', error.message);
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
   };
 
   const handleLeaveGroup = async () => {
+    if (leaving || leavingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to leave this group.');
       return;
     }
     try {
+      leavingRef.current = true;
       setLeaving(true);
       await leaveGroup(groupId);
       setLeaveVisible(false);
       navigation.goBack();
     } catch (error: any) {
-      setLeaving(false);
       Alert.alert('Could not leave group', error.message || 'Please try again.');
+    } finally {
+      leavingRef.current = false;
+      setLeaving(false);
     }
   };
 
@@ -432,7 +455,11 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
                     onPress={handleAddMember}
                     disabled={adding || !isConnected || !memberEmail.trim()}
                   >
-                    <Text style={styles.addButtonText}>{adding ? '...' : 'Add'}</Text>
+                    {adding ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.addButtonText}>Add</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -490,11 +517,12 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, leaving && { opacity: 0.6 }]}
                 onPress={handleLeaveGroup}
                 disabled={leaving}
                 activeOpacity={0.7}
               >
+                {leaving && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />}
                 <Text style={styles.confirmActionText}>{leaving ? 'Leaving...' : 'Leave group'}</Text>
               </TouchableOpacity>
             </View>
@@ -520,16 +548,19 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity
                 style={styles.confirmCancelBtn}
                 onPress={() => setDeleteVisible(false)}
+                disabled={deleting}
                 activeOpacity={0.7}
               >
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, deleting && { opacity: 0.6 }]}
                 onPress={handleDeleteGroup}
+                disabled={deleting}
                 activeOpacity={0.7}
               >
-                <Text style={styles.confirmActionText}>Delete group</Text>
+                {deleting && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />}
+                <Text style={styles.confirmActionText}>{deleting ? 'Deleting...' : 'Delete group'}</Text>
               </TouchableOpacity>
             </View>
           </View>
