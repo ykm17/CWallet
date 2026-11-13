@@ -1,4 +1,5 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
@@ -119,89 +120,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       });
   }, []);
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        selectionMode ? (
-          <TouchableOpacity
-            style={styles.topBarCancelBtn}
-            onPress={() => {
-              setSelectionMode(false);
-              setSelectedCardIds([]);
-            }}
-            activeOpacity={0.7}
-          >
-            <Icon source="close" size={16} color="#374151" />
-            <Text style={styles.topBarCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.topBarLeft}>
-            <View style={styles.topBarBrandBox}>
-              <Icon source="wallet" size={17} color="#FFFFFF" />
-            </View>
-            <Text style={styles.topBarBrandTitle}>CWallet</Text>
-            <View style={[styles.topBarStatusPill, isConnected ? styles.topBarStatusOnline : styles.topBarStatusOffline]}>
-              <View style={[styles.topBarStatusDot, isConnected ? styles.topBarStatusDotOnline : styles.topBarStatusDotOffline]} />
-              <Text style={[styles.topBarStatusText, isConnected ? styles.topBarStatusTextOnline : styles.topBarStatusTextOffline]}>
-                {isConnected ? 'Online' : 'Offline'}
-              </Text>
-            </View>
-          </View>
-        )
-      ),
-      headerTitle: () => (
-        selectionMode ? (
-          <Text style={styles.topBarSelectionTitle}>
-            {selectedCardIds.length} selected
-          </Text>
-        ) : null
-      ),
-      headerRight: () => (
-        selectionMode ? (
-          <TouchableOpacity
-            style={styles.topBarSelectAllBtn}
-            onPress={() => {
-              if (selectedCardIds.length === cardData.length) {
-                setSelectedCardIds([]);
-              } else {
-                setSelectedCardIds(cardData.map((c) => c.key));
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.topBarSelectAllText}>
-              {selectedCardIds.length === cardData.length ? 'Clear' : 'Select all'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.topBarRight}>
-            <TouchableOpacity
-              style={styles.topBarGroupsBtn}
-              onPress={() => navigation.navigate('Groups')}
-              activeOpacity={0.7}
-            >
-              <Icon source="account-group" size={16} color="#111111" />
-              <Text style={styles.topBarGroupsText}>Groups</Text>
-              {groups.length > 0 && (
-                <View style={styles.topBarGroupsBadge}>
-                  <Text style={styles.topBarGroupsBadgeText}>{groups.length}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.topBarLogoutBtn}
-              onPress={handleLogoutPress}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Log out"
-            >
-              <Icon source="logout" size={16} color="#DC2626" />
-            </TouchableOpacity>
-          </View>
-        )
-      ),
-    });
-  }, [navigation, selectionMode, selectedCardIds.length, cardData.length, isConnected, groups.length]);
+
 
   useEffect(() => {
     // Prevent navigating back to Login screen post login
@@ -456,7 +375,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.mainContainer}>
+    <SafeAreaView style={styles.mainContainer} edges={['top', 'left', 'right']}>
       <View style={{ flex: 1 }}>
         <CardFormModal
           visible={modalVisible}
@@ -545,6 +464,82 @@ const Home: React.FC<Props> = ({ navigation }) => {
             </View>
           </Dialog>
         </Portal>
+
+        {/* Top Header Bar */}
+        <View style={styles.topBar}>
+          {selectionMode ? (
+            <>
+              <TouchableOpacity
+                style={styles.topBarCancelBtn}
+                onPress={() => {
+                  setSelectionMode(false);
+                  setSelectedCardIds([]);
+                }}
+                activeOpacity={0.7}
+              >
+                <Icon source="close" size={16} color="#374151" />
+                <Text style={styles.topBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.topBarSelectionTitle}>
+                {selectedCardIds.length} selected
+              </Text>
+              <TouchableOpacity
+                style={styles.topBarSelectAllBtn}
+                onPress={() => {
+                  if (selectedCardIds.length === cardData.length) {
+                    setSelectedCardIds([]);
+                  } else {
+                    setSelectedCardIds(cardData.map((c) => c.key));
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.topBarSelectAllText}>
+                  {selectedCardIds.length === cardData.length ? 'Clear' : 'Select all'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.topBarLeft}>
+                <View style={styles.topBarBrandBox}>
+                  <Icon source="wallet" size={17} color="#FFFFFF" />
+                </View>
+                <Text style={styles.topBarBrandTitle}>CWallet</Text>
+                <View style={[styles.topBarStatusPill, isConnected ? styles.topBarStatusOnline : styles.topBarStatusOffline]}>
+                  <View style={[styles.topBarStatusDot, isConnected ? styles.topBarStatusDotOnline : styles.topBarStatusDotOffline]} />
+                  <Text style={[styles.topBarStatusText, isConnected ? styles.topBarStatusTextOnline : styles.topBarStatusTextOffline]}>
+                    {isConnected ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.topBarRight}>
+                <TouchableOpacity
+                  style={styles.topBarGroupsBtn}
+                  onPress={() => navigation.navigate('Groups')}
+                  activeOpacity={0.7}
+                >
+                  <Icon source="account-group" size={16} color="#111111" />
+                  <Text style={styles.topBarGroupsText}>Groups</Text>
+                  {groups.length > 0 && (
+                    <View style={styles.topBarGroupsBadge}>
+                      <Text style={styles.topBarGroupsBadgeText}>{groups.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.topBarLogoutBtn}
+                  onPress={handleLogoutPress}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Log out"
+                >
+                  <Icon source="logout" size={16} color="#DC2626" />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
 
         <Searchbar
           placeholder="Search"
@@ -868,6 +863,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F5F7',
     flex: 1,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
   fab: {
     backgroundColor: '#1B1B1B',
     color: 'white',
@@ -878,8 +881,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   searchBar: {
-    marginHorizontal: 10,
-    marginTop: 10,
+    marginHorizontal: 12,
+    marginTop: 6,
     marginBottom: 8,
     elevation: 2,
     backgroundColor: '#000000',
@@ -897,7 +900,7 @@ const styles = StyleSheet.create({
   filterChipContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 10,
+    marginHorizontal: 12,
     marginBottom: 6,
     gap: 8,
   },
@@ -925,7 +928,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 10,
+    marginHorizontal: 12,
     marginBottom: 4,
     backgroundColor: '#111111',
     borderRadius: 10,

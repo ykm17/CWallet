@@ -545,6 +545,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
+    marginRight: 6,
   },
   headerEditText: {
     color: '#111111',
@@ -832,6 +833,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
+    marginRight: 6,
   },
   headerLeaveText: {
     color: '#DC2626',

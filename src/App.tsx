@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Home from './screens/Home';
 import Login from './screens/Login';
 import Groups from './screens/Groups';
@@ -42,48 +43,50 @@ const App = () => {
     };
   }, []);
   return (
-    <ConnectivityProvider>
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName="Login"
-          screenOptions={{
-            headerStyle: { backgroundColor: '#F4F5F7' },
-            headerShadowVisible: false,
-            headerTitleAlign: 'center',
-            headerTitleStyle: {
-              fontWeight: '700',
-              fontSize: 17,
-              color: '#111111',
-            },
-            headerTintColor: '#111111',
-            statusBarColor: '#F4F5F7',
-            statusBarStyle: 'dark',
-          }}
-        >
-          <Stack.Screen
-            name="Home"
-            component={Home}
-            options={{
-              headerBackVisible: false,
-              gestureEnabled: false,
+    <SafeAreaProvider>
+      <ConnectivityProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="Login"
+            screenOptions={{
+              headerStyle: { backgroundColor: '#F4F5F7' },
+              headerShadowVisible: false,
+              headerTitleAlign: 'center',
+              headerTitleStyle: {
+                fontWeight: '700',
+                fontSize: 17,
+                color: '#111111',
+              },
+              headerTintColor: '#111111',
+              statusBarColor: '#F4F5F7',
+              statusBarStyle: 'dark',
             }}
-          />
-          <Stack.Screen name="Groups" component={Groups} />
-          <Stack.Screen name="GroupForm" component={GroupForm} />
-          <Stack.Screen name="GroupDetails" component={GroupDetails} />
-          <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
-          <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
-          <Stack.Screen
-            name="Login"
-            component={Login}
-            options={{
-              headerShown: false,
-              gestureEnabled: false,
-            }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </ConnectivityProvider>
+          >
+            <Stack.Screen
+              name="Home"
+              component={Home}
+              options={{
+                headerShown: false,
+                gestureEnabled: false,
+              }}
+            />
+            <Stack.Screen name="Groups" component={Groups} />
+            <Stack.Screen name="GroupForm" component={GroupForm} />
+            <Stack.Screen name="GroupDetails" component={GroupDetails} />
+            <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
+            <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
+            <Stack.Screen
+              name="Login"
+              component={Login}
+              options={{
+                headerShown: false,
+                gestureEnabled: false,
+              }}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </ConnectivityProvider>
+    </SafeAreaProvider>
   );
 };
 

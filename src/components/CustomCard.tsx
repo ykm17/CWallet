@@ -387,8 +387,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B1B1B',
     padding: 16,
     marginTop: 12,
-    marginStart: 10,
-    marginEnd: 10,
+    marginStart: 12,
+    marginEnd: 12,
     borderRadius: 12,
   },
   selectedContainer: {
