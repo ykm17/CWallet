@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   FlatList,
   Animated,
-  Vibration,
   ActivityIndicator,
 } from 'react-native';
 import { Alert } from './CustomAlert';
@@ -118,6 +117,17 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
 
   const isUpdate = Boolean(cardToEdit && cardToEdit.key);
 
+  const inputTheme = useMemo(() => ({
+    roundness: 12,
+    colors: {
+      primary: '#111111',
+      outline: '#E5E7EB',
+      background: '#FFFFFF',
+      onSurfaceVariant: '#6B7280',
+      error: '#DC2626',
+    },
+  }), []);
+
   const filteredBankKeys = useMemo(() => {
     const q = bankSearchQuery.trim().toLowerCase();
     const allKeys = Object.keys(BANK_DICTIONARY);
@@ -218,11 +228,6 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       const scannedData = await scanCardWithNfc((stage, message) => {
         setNfcStage(stage);
         setNfcStatusText(message);
-        if (stage === 'card_detected') {
-          try { Vibration.vibrate(70); } catch {}
-        } else if (stage === 'success') {
-          try { Vibration.vibrate([0, 50, 50, 50]); } catch {}
-        }
       });
 
       const updated = {
@@ -231,7 +236,6 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
         ...(scannedData.expiryMonth ? { month: scannedData.expiryMonth } : {}),
         ...(scannedData.expiryYear ? { year: scannedData.expiryYear } : {}),
         ...(scannedData.ownerName ? { ownerName: scannedData.ownerName } : {}),
-        ...(scannedData.cardName ? { name: scannedData.cardName } : {}),
         ...(scannedData.network ? { network: scannedData.network } : {}),
         ...(scannedData.cardType ? { cardType: scannedData.cardType } : {}),
       };
@@ -386,47 +390,56 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           )}
 
           {!isUpdate && (
-            <Button
-              icon="nfc"
-              mode="contained"
+            <TouchableOpacity
+              style={[styles.nfcBannerButton, !isConnected && { opacity: 0.5 }]}
               onPress={handleNfcScan}
               disabled={!isConnected}
-              style={[styles.nfcScanButton, !isConnected && { opacity: 0.5 }]}
-              labelStyle={{ color: 'white', fontWeight: 'bold' }}
+              activeOpacity={0.8}
             >
-              Scan with NFC (Tap card on phone)
-            </Button>
+              <View style={styles.nfcBannerIconWrap}>
+                <Icon source="nfc" size={20} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nfcBannerTitle}>Tap & Scan with NFC</Text>
+                <Text style={styles.nfcBannerSubtitle}>Scan your physical contactless card</Text>
+              </View>
+              <View style={styles.nfcBannerBadge}>
+                <Text style={styles.nfcBannerBadgeText}>Quick fill</Text>
+              </View>
+            </TouchableOpacity>
           )}
 
-          <View style={[styles.formElements, { marginBottom: 10 }]}>
+          {/* Bank Selector Field */}
+          <View style={styles.formSection}>
             <TouchableOpacity
               style={[
-                styles.bankSelectorButton,
-                touched.bankName && errors.bankName && styles.bankSelectorButtonError,
+                styles.selectorField,
+                touched.bankName && errors.bankName && styles.selectorFieldError,
               ]}
               onPress={() => setBankPickerVisible(true)}
               activeOpacity={0.8}
             >
-              <View style={styles.bankSelectorLeft}>
+              <View style={styles.selectorFieldLeft}>
                 {card.bankName && BANK_COLORS[card.bankName] ? (
                   <View style={[styles.bankColorDot, { backgroundColor: BANK_COLORS[card.bankName] }]} />
                 ) : (
-                  <Icon source="bank" size={18} color="#888888" />
+                  <Icon source="bank-outline" size={20} color="#6B7280" />
                 )}
-                <Text style={[styles.bankSelectorText, !card.bankName && styles.bankSelectorPlaceholder]}>
+                <Text style={[styles.selectorFieldText, !card.bankName && styles.selectorFieldPlaceholder]} numberOfLines={1}>
                   {BANK_DICTIONARY[card.bankName] ?? 'Select Bank'}
                 </Text>
               </View>
-              <Icon source="chevron-down" size={20} color="#888888" />
+              <Icon source="chevron-down" size={20} color="#6B7280" />
             </TouchableOpacity>
+            {touched.bankName && errors.bankName && (
+              <HelperText type="error" visible={true} style={styles.helperText}>
+                {errors.bankName}
+              </HelperText>
+            )}
           </View>
-          {touched.bankName && errors.bankName && (
-            <HelperText type="error">
-              {errors.bankName}
-            </HelperText>
-          )}
 
-          <View style={[styles.row, { marginBottom: 10 }]}>
+          {/* Network & Card Type Dropdowns */}
+          <View style={[styles.row, { marginBottom: 12 }]}>
             <View style={styles.halfWidth}>
               <Menu
                 contentStyle={styles.menuContent}
@@ -435,19 +448,22 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 anchor={
                   <TouchableOpacity
                     onPress={openNetworkMenu}
-                    style={styles.pickerSelectorButton}
+                    style={styles.dropdownSelector}
                     activeOpacity={0.8}
                   >
-                    <Text
-                      style={[
-                        styles.pickerSelectorText,
-                        !card.network && styles.pickerSelectorPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {CARD_NETWORKS[card.network || ''] ?? 'Network'}
-                    </Text>
-                    <Icon source="chevron-down" size={16} color="#888888" />
+                    <View style={styles.selectorFieldLeft}>
+                      <Icon source="credit-card-chip-outline" size={18} color="#6B7280" />
+                      <Text
+                        style={[
+                          styles.dropdownSelectorText,
+                          !card.network && styles.selectorFieldPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {CARD_NETWORKS[card.network || ''] ?? 'Network'}
+                      </Text>
+                    </View>
+                    <Icon source="chevron-down" size={18} color="#6B7280" />
                   </TouchableOpacity>
                 }
               >
@@ -473,19 +489,22 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 anchor={
                   <TouchableOpacity
                     onPress={openTypeMenu}
-                    style={styles.pickerSelectorButton}
+                    style={styles.dropdownSelector}
                     activeOpacity={0.8}
                   >
-                    <Text
-                      style={[
-                        styles.pickerSelectorText,
-                        !card.cardType && styles.pickerSelectorPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {CARD_TYPES[card.cardType || ''] ?? 'Type'}
-                    </Text>
-                    <Icon source="chevron-down" size={16} color="#888888" />
+                    <View style={styles.selectorFieldLeft}>
+                      <Icon source="card-text-outline" size={18} color="#6B7280" />
+                      <Text
+                        style={[
+                          styles.dropdownSelectorText,
+                          !card.cardType && styles.selectorFieldPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {CARD_TYPES[card.cardType || ''] ?? 'Type'}
+                      </Text>
+                    </View>
+                    <Icon source="chevron-down" size={18} color="#6B7280" />
                   </TouchableOpacity>
                 }
               >
@@ -504,6 +523,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             </View>
           </View>
 
+          {/* Card Owner Name */}
           <TextInput
             key={`ownerName-${formKey}`}
             label="Card owner name"
@@ -519,18 +539,26 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             autoComplete="off"
             textContentType="none"
             mode="outlined"
+            outlineColor={touched.ownerName && errors.ownerName ? '#DC2626' : '#E5E7EB'}
+            activeOutlineColor="#111111"
+            textColor="#111111"
+            placeholderTextColor="#9CA3AF"
+            outlineStyle={styles.inputOutline}
+            theme={inputTheme}
+            left={<TextInput.Icon icon="account-outline" size={20} color="#6B7280" />}
             onBlur={() => handleBlur('ownerName')}
-            style={styles.formElements}
+            style={styles.textInput}
           />
           {touched.ownerName && errors.ownerName && (
-            <HelperText type="error">
+            <HelperText type="error" visible={true} style={styles.helperText}>
               {errors.ownerName}
             </HelperText>
           )}
 
+          {/* Card Number */}
           <TextInput
             key={`number-${formKey}`}
-            label="Card Number"
+            label="Card number"
             value={card.number}
             placeholder="14, 15, or 16 digit card number"
             onChangeText={text => {
@@ -549,21 +577,29 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             maxLength={19}
             keyboardType="numeric"
             mode="outlined"
+            outlineColor={touched.number && errors.number ? '#DC2626' : '#E5E7EB'}
+            activeOutlineColor="#111111"
+            textColor="#111111"
+            placeholderTextColor="#9CA3AF"
+            outlineStyle={styles.inputOutline}
+            theme={inputTheme}
+            left={<TextInput.Icon icon="credit-card-outline" size={20} color="#6B7280" />}
             onBlur={() => handleBlur('number')}
-            style={styles.formElements}
+            style={styles.textInput}
           />
           {touched.number && errors.number && (
-            <HelperText type="error">
+            <HelperText type="error" visible={true} style={styles.helperText}>
               {errors.number}
             </HelperText>
           )}
 
+          {/* Expiry Month and Year */}
           <View style={styles.row}>
             <View style={styles.halfWidth}>
               <TextInput
                 key={`month-${formKey}`}
                 label="Expiry month"
-                placeholder="00"
+                placeholder="MM"
                 defaultValue={card.month}
                 onChangeText={text => {
                   const cleaned = text.replace(/[^0-9]/g, '');
@@ -573,11 +609,18 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 maxLength={2}
                 keyboardType="numeric"
                 mode="outlined"
+                outlineColor={touched.month && errors.month ? '#DC2626' : '#E5E7EB'}
+                activeOutlineColor="#111111"
+                textColor="#111111"
+                placeholderTextColor="#9CA3AF"
+                outlineStyle={styles.inputOutline}
+                theme={inputTheme}
+                left={<TextInput.Icon icon="calendar-month-outline" size={20} color="#6B7280" />}
                 onBlur={() => handleBlur('month')}
-                style={styles.formElements}
+                style={styles.textInput}
               />
               {touched.month && errors.month && (
-                <HelperText type="error">
+                <HelperText type="error" visible={true} style={styles.helperText}>
                   {errors.month}
                 </HelperText>
               )}
@@ -587,7 +630,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
               <TextInput
                 key={`year-${formKey}`}
                 label="Expiry year"
-                placeholder="00"
+                placeholder="YY"
                 defaultValue={card.year}
                 onChangeText={text => {
                   const cleaned = text.replace(/[^0-9]/g, '');
@@ -597,21 +640,29 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 maxLength={2}
                 keyboardType="numeric"
                 mode="outlined"
+                outlineColor={touched.year && errors.year ? '#DC2626' : '#E5E7EB'}
+                activeOutlineColor="#111111"
+                textColor="#111111"
+                placeholderTextColor="#9CA3AF"
+                outlineStyle={styles.inputOutline}
+                theme={inputTheme}
+                left={<TextInput.Icon icon="calendar-outline" size={20} color="#6B7280" />}
                 onBlur={() => handleBlur('year')}
-                style={styles.formElements}
+                style={styles.textInput}
               />
               {touched.year && errors.year && (
-                <HelperText type="error">
+                <HelperText type="error" visible={true} style={styles.helperText}>
                   {errors.year}
                 </HelperText>
               )}
             </View>
           </View>
 
+          {/* CVV / CID */}
           <TextInput
             key={`cvv-${formKey}`}
             label="CVV / CID"
-            placeholder="000 or 0000"
+            placeholder="3 or 4 digits"
             defaultValue={card.cvv}
             onChangeText={text => {
               const cleaned = text.replace(/[^0-9]/g, '');
@@ -621,20 +672,27 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             maxLength={4}
             keyboardType="numeric"
             mode="outlined"
+            outlineColor={touched.cvv && errors.cvv ? '#DC2626' : '#E5E7EB'}
+            activeOutlineColor="#111111"
+            textColor="#111111"
+            placeholderTextColor="#9CA3AF"
+            outlineStyle={styles.inputOutline}
+            theme={inputTheme}
+            left={<TextInput.Icon icon="shield-outline" size={20} color="#6B7280" />}
             onBlur={() => handleBlur('cvv')}
-            style={styles.formElements}
+            style={styles.textInput}
           />
           {touched.cvv && errors.cvv && (
-            <HelperText type="error">
+            <HelperText type="error" visible={true} style={styles.helperText}>
               {errors.cvv}
             </HelperText>
           )}
 
+          {/* Card Nickname */}
           <TextInput
             key={`name-${formKey}`}
-            style={styles.formElements}
-            label="Card name"
-            placeholder="Type/name of card"
+            label="Card nickname"
+            placeholder="e.g. Shopping, Millennia, Rewards"
             defaultValue={card.name}
             onChangeText={text => {
               cardRef.current.name = text;
@@ -646,18 +704,27 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             autoComplete="off"
             textContentType="none"
             mode="outlined"
+            outlineColor={touched.name && errors.name ? '#DC2626' : '#E5E7EB'}
+            activeOutlineColor="#111111"
+            textColor="#111111"
+            placeholderTextColor="#9CA3AF"
+            outlineStyle={styles.inputOutline}
+            theme={inputTheme}
+            left={<TextInput.Icon icon="tag-outline" size={20} color="#6B7280" />}
             onBlur={() => handleBlur('name')}
+            style={styles.textInput}
           />
           {touched.name && errors.name && (
-            <HelperText type="error">
+            <HelperText type="error" visible={true} style={styles.helperText}>
               {errors.name}
             </HelperText>
           )}
 
+          {/* Credit Limit */}
           <TextInput
             key={`limit-${formKey}`}
-            label="Limit"
-            placeholder="Your credit card limit"
+            label="Credit limit"
+            placeholder="e.g. 100000"
             defaultValue={card.limit}
             onChangeText={text => {
               const cleaned = text.replace(/[^0-9]/g, '');
@@ -667,11 +734,18 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             maxLength={12}
             keyboardType="numeric"
             mode="outlined"
+            outlineColor={touched.limit && errors.limit ? '#DC2626' : '#E5E7EB'}
+            activeOutlineColor="#111111"
+            textColor="#111111"
+            placeholderTextColor="#9CA3AF"
+            outlineStyle={styles.inputOutline}
+            theme={inputTheme}
+            left={<TextInput.Icon icon="cash" size={20} color="#6B7280" />}
             onBlur={() => handleBlur('limit')}
-            style={styles.formElements}
+            style={styles.textInput}
           />
           {touched.limit && errors.limit && (
-            <HelperText type="error">
+            <HelperText type="error" visible={true} style={styles.helperText}>
               {errors.limit}
             </HelperText>
           )}
@@ -997,54 +1071,147 @@ const styles = StyleSheet.create({
   halfWidth: {
     flex: 1,
   },
-  pickerSelectorButton: {
+  nfcBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  nfcBannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nfcBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  nfcBannerSubtitle: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  nfcBannerBadge: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  nfcBannerBadgeText: {
+    color: '#065F46',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  formSection: {
+    marginBottom: 12,
+  },
+  selectorField: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E1E1E',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 52,
   },
-  pickerSelectorText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+  selectorFieldError: {
+    borderColor: '#DC2626',
+    borderWidth: 1.5,
+  },
+  selectorFieldLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
   },
-  pickerSelectorPlaceholder: {
-    color: '#AAAAAA',
-    fontWeight: 'normal',
+  selectorFieldText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111111',
+    flex: 1,
+  },
+  selectorFieldPlaceholder: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  dropdownSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 50,
+  },
+  dropdownSelectorText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#111111',
+    flex: 1,
+  },
+  textInput: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 4,
+    fontSize: 14,
+  },
+  inputOutline: {
+    borderRadius: 12,
+  },
+  helperText: {
+    marginTop: -2,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+    fontSize: 11,
+    color: '#DC2626',
   },
   menuContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-  },
-  dropDownButton: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: 8,
-    width: '100%',
+    borderRadius: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   button: {
     marginTop: 16,
     marginBottom: 8,
-    backgroundColor: '#6B7280',
-    borderRadius: 8,
-    paddingVertical: 2,
+    backgroundColor: '#9CA3AF',
+    borderRadius: 12,
+    paddingVertical: 4,
   },
   buttonActive: {
-    backgroundColor: '#000000',
+    backgroundColor: '#111111',
   },
   buttonLabel: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
-  nfcScanButton: {
-    backgroundColor: '#0066cc',
-    marginBottom: 12,
-    borderRadius: 8,
+  bankColorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
   },
   nfcModalContent: {
     backgroundColor: '#FFFFFF',
@@ -1174,39 +1341,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
   },
-  bankSelectorButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#000000',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  bankSelectorButtonError: {
-    borderWidth: 1,
-    borderColor: '#B00020',
-  },
-  bankSelectorLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  bankColorDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginRight: 10,
-  },
-  bankSelectorText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  bankSelectorPlaceholder: {
-    color: '#AAAAAA',
-    fontWeight: 'normal',
-  },
+
   bankPickerModal: {
     backgroundColor: '#F8F9FA',
     marginHorizontal: 16,

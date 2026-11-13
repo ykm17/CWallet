@@ -15,6 +15,9 @@ export interface Card {
     ownerId?: string,
     sharedGroupIds?: string[],
     accessGroupNames?: string[],
+    addedAt?: any,
+    createdAt?: any,
+    sharedAt?: any,
 }
 
 export type ContributionPermission = 'open' | 'owner_only';

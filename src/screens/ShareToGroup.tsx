@@ -10,7 +10,7 @@ import { Card, Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { parseCardDocument } from '../services/cardService';
 import { shareCardsWithGroup, shareCardsWithGroups, unshareCardFromGroup } from '../services/sharingService';
-import { canShareToGroup, contributionLabel } from '../services/sharingUtils';
+import { canShareToGroup, contributionLabel, sortCardsByLatest } from '../services/sharingUtils';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
 import { ConnectivityContext } from '../util/Connectivity';
@@ -52,7 +52,7 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
           cards.push(card);
         }
       });
-      setOwnedCards(cards);
+      setOwnedCards(sortCardsByLatest(cards));
     });
   }, [uid]);
 

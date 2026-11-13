@@ -3,7 +3,7 @@ import { getFirestore, collection, doc, getDoc, getDocs, query, where, writeBatc
 import { COLLECTIONS } from '../constants/Firestore';
 import { Card } from '../types/Types';
 import { decryptCardData } from '../util/Crypto';
-import { chunkForBatch } from './sharingUtils';
+import { chunkForBatch, sortCardsByLatest, toTimestampMillis } from './sharingUtils';
 
 const db = () => getFirestore();
 
@@ -17,12 +17,23 @@ export const parseCardDocument = (snapshotDoc: any): Card | null => {
     if (!decryptedCard) {
       return null;
     }
+    const rawAddedAt =
+      data.addedAt ??
+      data.createdAt ??
+      decryptedCard.addedAt ??
+      decryptedCard.createdAt ??
+      (snapshotDoc.metadata?.hasPendingWrites ? Date.now() : null);
+
+    const addedAt = toTimestampMillis(rawAddedAt) || undefined;
+
     return {
       ...decryptedCard,
       key: snapshotDoc.id,
       ownerId: data.ownerId,
       sharedGroupIds: data.sharedGroupIds || [],
       isPersonal: decryptedCard.isPersonal ?? true,
+      addedAt,
+      createdAt: addedAt,
     };
   } catch (error) {
     console.error('Error decrypting card:', snapshotDoc.id, error);
@@ -49,7 +60,7 @@ export const fetchCardsByIds = async (cardIds: string[]): Promise<Card[]> => {
       }
     }),
   );
-  return cards;
+  return sortCardsByLatest(cards);
 };
 
 export const deleteOwnedCard = async (cardId: string): Promise<void> => {

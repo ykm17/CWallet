@@ -10,7 +10,7 @@ import { addMemberToGroup, deleteGroup, leaveGroup, listenGroup, listenGroupMemb
 import { listenAccessForGroup } from '../services/sharingService';
 import { fetchCardsByIds } from '../services/cardService';
 import CustomCard from '../components/CustomCard';
-import { contributionLabel } from '../services/sharingUtils';
+import { contributionLabel, sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { ConnectivityContext } from '../util/Connectivity';
 
@@ -110,14 +110,23 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       setAccessCount(access.length);
       const nextCards = await fetchCardsByIds(access.map((item) => item.cardId));
       const groupNameById = groups.reduce<Record<string, string>>((acc, g) => { acc[g.groupId] = g.name; return acc; }, {});
+      const accessSharedAtByCard: Record<string, number> = {};
+      access.forEach((item) => {
+        const time = toTimestampMillis(item.sharedAt);
+        if (time > (accessSharedAtByCard[item.cardId] || 0)) {
+          accessSharedAtByCard[item.cardId] = time;
+        }
+      });
       const enrichedCards = nextCards.map((c) => {
         const gnames = (c.sharedGroupIds || []).map((id) => groupNameById[id]).filter(Boolean);
+        const sharedAt = accessSharedAtByCard[c.key] || toTimestampMillis(c.sharedAt) || undefined;
         return {
           ...c,
+          sharedAt,
           accessGroupNames: gnames.length > 0 ? gnames : (group?.name ? [group.name] : []),
         };
       });
-      setCards(enrichedCards);
+      setCards(sortCardsByLatest(enrichedCards));
     });
     return () => {
       unsubGroup();

@@ -20,6 +20,7 @@ import { ConnectivityContext } from '../util/Connectivity';
 import { detectCardType } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { parseCardDocument } from '../services/cardService';
+import { sortCardsByLatest } from '../services/sharingUtils';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { useAccessibleCards } from '../hooks/useAccessibleCards';
 import { upsertCurrentUserProfile } from '../services/userService';
@@ -60,7 +61,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   );
 
   const personalCardsWithGroups = useMemo<Card[]>(() => {
-    return cardData.map((card) => {
+    const list = cardData.map((card) => {
       const gnames = (card.sharedGroupIds || []).map(
         (gid) => groupNameById[gid] || 'Group'
       );
@@ -69,9 +70,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
         accessGroupNames: gnames,
       };
     });
+    return sortCardsByLatest(list);
   }, [cardData, groupNameById]);
 
-  const sourceCards: Card[] = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;
+  const sourceCards: Card[] = useMemo(() => {
+    const list = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;
+    return sortCardsByLatest(list);
+  }, [isCardPersonal, personalCardsWithGroups, sharedCards]);
 
   const filteredCards = sourceCards.filter((card: Card) => {
     const query = searchQuery.toLowerCase();
@@ -250,6 +255,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
         ownerId: auth().currentUser?.uid,
         encryptedData,
         addedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
         isPersonal: true,
       };
 
@@ -257,7 +263,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
       if (savedCard.key) {
         console.log("Updating existing card:", savedCard.key);
-        const { addedAt, ...updateData } = cardDocData;
+        const { addedAt, createdAt, ...updateData } = cardDocData;
         await updateDoc(doc(db, 'cards', savedCard.key), updateData);
       } else {
         console.log("Creating new card");

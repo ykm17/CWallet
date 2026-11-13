@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
-import { accessDocId, canShareToGroup, uniqueIds } from '../src/services/sharingUtils';
+import { accessDocId, canShareToGroup, uniqueIds, toTimestampMillis, getCardSortTimestamp, sortCardsByLatest } from '../src/services/sharingUtils';
 import { CONTRIBUTION } from '../src/constants/Firestore';
-import { Group } from '../src/types/Types';
+import { Group, Card } from '../src/types/Types';
 
 const group = (overrides: Partial<Group> = {}): Group => ({
   groupId: 'g1',
@@ -64,5 +64,42 @@ describe('sharing helpers', () => {
       { cardId: 'c2', groupId: 'g2' },
       { cardId: 'c2', groupId: 'g3' },
     ]);
+  });
+
+  describe('timestamp normalization and latest card sorting', () => {
+    it('normalizes various timestamp formats correctly', () => {
+      expect(toTimestampMillis(null)).toBe(0);
+      expect(toTimestampMillis(undefined)).toBe(0);
+      expect(toTimestampMillis(0)).toBe(0);
+      expect(toTimestampMillis(1731500000000)).toBe(1731500000000);
+      expect(toTimestampMillis(1731500000)).toBe(1731500000000); // seconds converted to millis
+      expect(toTimestampMillis({ toMillis: () => 1731500000123 })).toBe(1731500000123);
+      expect(toTimestampMillis({ seconds: 1731500000, nanoseconds: 500000000 })).toBe(1731500000500);
+      expect(toTimestampMillis({ _seconds: 1731500000, _nanoseconds: 250000000 })).toBe(1731500000250);
+      expect(toTimestampMillis(new Date('2026-11-13T10:00:00.000Z'))).toBe(Date.parse('2026-11-13T10:00:00.000Z'));
+      expect(toTimestampMillis('2026-11-13T10:00:00.000Z')).toBe(Date.parse('2026-11-13T10:00:00.000Z'));
+    });
+
+    it('extracts maximum relevant sort timestamp for a card', () => {
+      const cardA: Partial<Card> = { addedAt: 1000, sharedAt: 5000 };
+      expect(getCardSortTimestamp(cardA)).toBe(5000);
+
+      const cardB: Partial<Card> = { addedAt: 8000 };
+      expect(getCardSortTimestamp(cardB)).toBe(8000);
+
+      expect(getCardSortTimestamp(null)).toBe(0);
+    });
+
+    it('sorts cards in descending order so latest card added/shared is at the top', () => {
+      const cardOld: Partial<Card> = { key: 'old', addedAt: 1000 };
+      const cardMid: Partial<Card> = { key: 'mid', addedAt: 2000 };
+      const cardNew: Partial<Card> = { key: 'new', addedAt: 3000 };
+      const cardSharedRecently: Partial<Card> = { key: 'shared', addedAt: 500, sharedAt: 4000 };
+
+      const unsorted = [cardOld, cardNew, cardMid, cardSharedRecently];
+      const sorted = sortCardsByLatest(unsorted);
+
+      expect(sorted.map((c) => c.key)).toEqual(['shared', 'new', 'mid', 'old']);
+    });
   });
 });

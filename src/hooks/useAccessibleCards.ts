@@ -4,6 +4,7 @@ import { Card, CardGroupAccess, Group } from '../types/Types';
 import { COLLECTIONS } from '../constants/Firestore';
 import { parseCardDocument } from '../services/cardService';
 import { listenAccessForGroups } from '../services/sharingService';
+import { sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
 
 export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
   const [accessRecords, setAccessRecords] = useState<CardGroupAccess[]>([]);
@@ -91,6 +92,8 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
       return acc;
     }, {});
     const groupIdsByCard: Record<string, string[]> = {};
+    const latestSharedAtByCard: Record<string, number> = {};
+
     accessRecords.forEach((record) => {
       if (!groupIdsByCard[record.cardId]) {
         groupIdsByCard[record.cardId] = [];
@@ -98,8 +101,13 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
       if (!groupIdsByCard[record.cardId].includes(record.groupId)) {
         groupIdsByCard[record.cardId].push(record.groupId);
       }
+      const recordSharedAt = toTimestampMillis(record.sharedAt);
+      if (recordSharedAt > (latestSharedAtByCard[record.cardId] || 0)) {
+        latestSharedAtByCard[record.cardId] = recordSharedAt;
+      }
     });
-    return Object.values(cardsById).map((card) => {
+
+    const mapped = Object.values(cardsById).map((card) => {
       const matchedGroupNames = new Set<string>();
 
       // 1. From cardGroupAccess records for the user's groups
@@ -116,11 +124,16 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
         }
       });
 
+      const sharedAt = latestSharedAtByCard[card.key] || toTimestampMillis(card.sharedAt) || undefined;
+
       return {
         ...card,
+        sharedAt,
         accessGroupNames: Array.from(matchedGroupNames),
       };
     });
+
+    return sortCardsByLatest(mapped);
   }, [cardsById, accessRecords, groupList]);
 
   return { cards, accessRecords, loading };

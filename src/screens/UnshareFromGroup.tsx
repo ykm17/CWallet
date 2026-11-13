@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import { Card, Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { parseCardDocument } from '../services/cardService';
 import { unshareCardsFromGroups } from '../services/sharingService';
+import { sortCardsByLatest } from '../services/sharingUtils';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
 import { ConnectivityContext } from '../util/Connectivity';
@@ -51,7 +52,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           cards.push(card);
         }
       });
-      setOwnedCards(cards);
+      setOwnedCards(sortCardsByLatest(cards));
     });
   }, [uid]);
 
@@ -118,10 +119,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const savingRef = useRef(false);
-
   const handleUnshare = async () => {
-    if (saving || savingRef.current) return;
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to unshare cards from groups.');
       return;
@@ -158,9 +156,7 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           text: 'Unshare',
           style: 'destructive',
           onPress: async () => {
-            if (savingRef.current) return;
             try {
-              savingRef.current = true;
               setSaving(true);
               await unshareCardsFromGroups(cardIdsToUnshare, selectedGroupIds);
               Alert.alert(
@@ -171,7 +167,6 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
             } catch (error: any) {
               Alert.alert('Could not unshare cards', error.message || 'Please try again.');
             } finally {
-              savingRef.current = false;
               setSaving(false);
             }
           },
