@@ -290,10 +290,69 @@ export const removeMemberFromGroup = async (groupId: string, userId: string): Pr
   if (userId === group.ownerId) {
     throw new Error('The group owner cannot be removed.');
   }
+
+  // Remove any cards shared by this member into the group
+  const userAccessSnap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.CARD_GROUP_ACCESS),
+      where('groupId', '==', groupId),
+      where('sharedBy', '==', userId),
+    ),
+  );
+
   const batch = writeBatch(db());
+  userAccessSnap.docs.forEach((accessDoc: any) => {
+    const data = accessDoc.data();
+    batch.delete(accessDoc.ref);
+    if (data.cardId) {
+      batch.update(doc(db(), COLLECTIONS.CARDS, data.cardId), {
+        sharedGroupIds: arrayRemove(groupId),
+      });
+    }
+  });
+
   batch.delete(doc(db(), COLLECTIONS.GROUPS, groupId, COLLECTIONS.MEMBERS, userId));
   batch.update(doc(db(), COLLECTIONS.GROUPS, groupId), {
     memberIds: arrayRemove(userId),
+    memberCount: increment(-1),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
+};
+
+export const leaveGroup = async (groupId: string): Promise<void> => {
+  const uid = requireUid();
+  const group = await fetchGroup(groupId);
+  if (uid === group.ownerId) {
+    throw new Error('Group owners cannot leave the group. You can delete the group instead.');
+  }
+  if (!group.memberIds.includes(uid)) {
+    throw new Error('You are not a member of this group.');
+  }
+
+  // Remove any cards shared by this member into the group
+  const userAccessSnap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.CARD_GROUP_ACCESS),
+      where('groupId', '==', groupId),
+      where('sharedBy', '==', uid),
+    ),
+  );
+
+  const batch = writeBatch(db());
+  userAccessSnap.docs.forEach((accessDoc: any) => {
+    const data = accessDoc.data();
+    batch.delete(accessDoc.ref);
+    if (data.cardId) {
+      batch.update(doc(db(), COLLECTIONS.CARDS, data.cardId), {
+        sharedGroupIds: arrayRemove(groupId),
+      });
+    }
+  });
+
+  batch.delete(doc(db(), COLLECTIONS.GROUPS, groupId, COLLECTIONS.MEMBERS, uid));
+  batch.update(doc(db(), COLLECTIONS.GROUPS, groupId), {
+    memberIds: arrayRemove(uid),
     memberCount: increment(-1),
     updatedAt: serverTimestamp(),
   });

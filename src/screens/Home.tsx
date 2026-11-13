@@ -1,4 +1,4 @@
-import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert } from 'react-native';
+import { View, SafeAreaView, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator } from 'react-native';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
@@ -35,13 +35,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
-  const [loadingScreen, setLoadingScreen] = useState('Loading cards');
+  const [personalLoading, setPersonalLoading] = useState(true);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [cardToShare, setCardToShare] = useState<Card | null>(null);
   const { isConnected } = useContext(ConnectivityContext);
-  const { groups } = useUserGroups();
-  const { cards: sharedCards } = useAccessibleCards(groups, isConnected);
+  const { groups, loading: groupsLoading } = useUserGroups();
+  const { cards: sharedCards, loading: sharedCardsLoading } = useAccessibleCards(groups, isConnected);
 
   const getCardEffectiveType = (card: Card): string => {
     if (card.cardType) return card.cardType.toUpperCase();
@@ -192,11 +192,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
     try {
       if (isConnected) {
+        setPersonalLoading(true);
         console.log("Fetching cards for user:", auth().currentUser?.uid);
         const q = query(collection(db, 'cards'), where('ownerId', '==', auth().currentUser?.uid));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        unsubscribe = onSnapshot(q, (snapshot) => {
           console.log("Snapshot received:", snapshot.size, "documents");
           const cards: Card[] = [];
 
@@ -210,19 +212,25 @@ const Home: React.FC<Props> = ({ navigation }) => {
           console.log("Processed cards:", cards.length);
           setCardData(cards);
           saveCardsInSecureStorage(cards);
+          setPersonalLoading(false);
         }, (error) => {
           console.error("Snapshot listener error:", error);
+          setPersonalLoading(false);
+          fetchCardsFromStorage();
         });
-
-        return () => {
-          unsubscribe();
-        };
       } else {
+        setPersonalLoading(true);
         fetchCardsFromStorage();
       }
     } catch (e) {
       console.error("Error setting up snapshot listeners:", e);
+      setPersonalLoading(false);
     }
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [isConnected]);
 
   const handleLogoutPress = () => {
@@ -274,7 +282,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       hideModal();
     } catch (error) {
       console.error('Error in handleSaveCard:', error);
-      setLoadingScreen("Error saving card.");
+      Alert.alert('Save Failed', 'Could not save the card. Please try again.');
     }
   };
 
@@ -308,18 +316,26 @@ const Home: React.FC<Props> = ({ navigation }) => {
       }
     } catch (e) {
       console.error('Failed to fetch cards from secure storage:', e);
-    } finally {
-      setLoadingScreen("No cards found.");
     }
     return [];
   };
 
   const fetchCardsFromStorage = async () => {
-    const cards = await getCardsFromSecureStorage();
-    if (cards.length > 0) {
-      setCardData(cards);
+    try {
+      const cards = await getCardsFromSecureStorage();
+      if (cards && cards.length > 0) {
+        setCardData(cards);
+      }
+    } catch (e) {
+      console.error('Failed to load cards from storage', e);
+    } finally {
+      setPersonalLoading(false);
     }
   };
+
+  const isCurrentTabLoading = isCardPersonal === 'PRL'
+    ? personalLoading
+    : (isConnected ? (sharedCardsLoading || groupsLoading) : false);
 
   const displayedCards = filteredCards.filter((card: Card) => {
       if (selectedTypeFilter === 'ALL') return true;
@@ -578,15 +594,84 @@ const Home: React.FC<Props> = ({ navigation }) => {
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
           ListEmptyComponent={
-            <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
-              <Icon source="credit-card-off-outline" size={44} color="#9CA3AF" />
-              <Text style={{ fontSize: 16, color: '#6B7280', marginTop: 10, textAlign: 'center' }}>
-                {sourceCards.length === 0
-                  ? (isCardPersonal === 'GRP' ? 'No cards shared with your groups yet.' : loadingScreen)
-                  : selectedTypeFilter !== 'ALL'
-                  ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}`
-                  : `No cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}`}
-              </Text>
+            <View style={styles.emptyContainer}>
+              {isCurrentTabLoading && sourceCards.length === 0 ? (
+                <View style={styles.emptyInner}>
+                  <ActivityIndicator size="small" color="#111111" style={{ marginBottom: 12 }} />
+                  <Text style={styles.emptyTitle}>
+                    {isCardPersonal === 'PRL' ? 'Loading cards...' : 'Loading shared cards...'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    Fetching the latest cards for your wallet
+                  </Text>
+                </View>
+              ) : sourceCards.length === 0 ? (
+                <View style={styles.emptyInner}>
+                  <Icon
+                    source={isCardPersonal === 'PRL' ? 'credit-card-plus-outline' : 'account-group-outline'}
+                    size={46}
+                    color="#9CA3AF"
+                  />
+                  <Text style={styles.emptyTitle}>
+                    {isCardPersonal === 'PRL' ? 'No cards yet' : 'No shared cards yet'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {isCardPersonal === 'PRL'
+                      ? 'Add your credit or debit cards to securely manage and share them.'
+                      : 'Cards shared with groups you belong to will appear here.'}
+                  </Text>
+                  {isCardPersonal === 'PRL' && isConnected && (
+                    <TouchableOpacity
+                      style={styles.emptyActionButton}
+                      onPress={() => showModal()}
+                      activeOpacity={0.8}
+                    >
+                      <Icon source="plus" size={16} color="#FFFFFF" />
+                      <Text style={styles.emptyActionButtonText}>Add your first card</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isCardPersonal === 'GRP' && (
+                    <TouchableOpacity
+                      style={styles.emptyActionButton}
+                      onPress={() => navigation.navigate('Groups')}
+                      activeOpacity={0.8}
+                    >
+                      <Icon source="account-group" size={16} color="#FFFFFF" />
+                      <Text style={styles.emptyActionButtonText}>Manage groups</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.emptyInner}>
+                  <Icon
+                    source={searchQuery.trim().length > 0 ? 'magnify' : 'credit-card-off-outline'}
+                    size={46}
+                    color="#9CA3AF"
+                  />
+                  <Text style={styles.emptyTitle}>
+                    {searchQuery.trim().length > 0 ? 'No matching cards' : 'No cards found'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {searchQuery.trim().length > 0
+                      ? `No cards matched "${searchQuery.trim()}". Try a different search.`
+                      : selectedTypeFilter !== 'ALL'
+                      ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}.`
+                      : 'Try clearing your filters.'}
+                  </Text>
+                  {(searchQuery.trim().length > 0 || selectedTypeFilter !== 'ALL') && (
+                    <TouchableOpacity
+                      style={styles.emptyClearButton}
+                      onPress={() => {
+                        setSearchQuery('');
+                        setSelectedTypeFilter('ALL');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.emptyClearButtonText}>Clear filters</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
           }
         />
@@ -918,5 +1003,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 40,
+  },
+  emptyInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 320,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111111',
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 6,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#111111',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 18,
+  },
+  emptyActionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  emptyClearButton: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 14,
+  },
+  emptyClearButtonText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

@@ -5,7 +5,7 @@ import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
 import { RootStackParamList } from '../App';
 import { Card, Group, GroupMember } from '../types/Types';
-import { addMemberToGroup, deleteGroup, listenGroup, listenGroupMembers, removeMemberFromGroup, upgradePendingMembersIfRegistered } from '../services/groupService';
+import { addMemberToGroup, deleteGroup, leaveGroup, listenGroup, listenGroupMembers, removeMemberFromGroup, upgradePendingMembersIfRegistered } from '../services/groupService';
 import { listenAccessForGroup } from '../services/sharingService';
 import { fetchCardsByIds } from '../services/cardService';
 import CustomCard from '../components/CustomCard';
@@ -26,6 +26,8 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<'cards' | 'members'>('cards');
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [leaveVisible, setLeaveVisible] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const isOwner = group?.ownerId === uid;
   const userCardsInGroup = cards.filter(
@@ -41,7 +43,16 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.navigate('GroupForm', { groupId })}>
           <Text style={styles.headerAction}>Edit</Text>
         </TouchableOpacity>
-      ) : null,
+      ) : (
+        <TouchableOpacity
+          onPress={() => setLeaveVisible(true)}
+          style={styles.headerLeaveBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Icon source="exit-to-app" size={15} color="#DC2626" />
+          <Text style={styles.headerLeaveText}>Leave</Text>
+        </TouchableOpacity>
+      ),
     });
   }, [group?.name, isOwner, groupId, navigation]);
 
@@ -137,8 +148,21 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const handleLeaveGroup = async () => {
+    try {
+      setLeaving(true);
+      await leaveGroup(groupId);
+      setLeaveVisible(false);
+      navigation.goBack();
+    } catch (error: any) {
+      setLeaving(false);
+      Alert.alert('Could not leave group', error.message || 'Please try again.');
+    }
+  };
+
   const renderMember = ({ item }: { item: GroupMember }) => {
     const isPending = item.status === 'pending';
+    const isCurrentUser = item.userId === uid;
     return (
       <View style={styles.memberRow}>
         <View style={[styles.memberAvatar, isPending && styles.memberAvatarPending]}>
@@ -147,7 +171,14 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.memberName}>{item.displayName || 'CWallet user'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.memberName}>{item.displayName || 'CWallet user'}</Text>
+            {isCurrentUser && (
+              <View style={styles.youBadge}>
+                <Text style={styles.youBadgeText}>You</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.memberEmail}>{item.email || item.appleUserId || item.userId}</Text>
         </View>
         <View style={[styles.roleBadge, isPending ? styles.pendingBadge : item.role === 'owner' ? styles.ownerBadge : styles.memberBadge]}>
@@ -158,6 +189,16 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         {isOwner && item.role !== 'owner' && (
           <TouchableOpacity onPress={() => handleRemoveMember(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Icon source="close-circle-outline" size={20} color="#D32F2F" />
+          </TouchableOpacity>
+        )}
+        {!isOwner && isCurrentUser && (
+          <TouchableOpacity
+            onPress={() => setLeaveVisible(true)}
+            style={styles.memberLeaveRowBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon source="exit-to-app" size={14} color="#DC2626" />
+            <Text style={styles.memberLeaveRowText}>Leave</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -311,29 +352,97 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           }
           ListFooterComponent={
             isOwner ? (
-              <Button
-                mode="outlined"
-                textColor="#D32F2F"
-                onPress={() => setDeleteVisible(true)}
+              <TouchableOpacity
                 style={styles.deleteButton}
+                onPress={() => setDeleteVisible(true)}
+                activeOpacity={0.8}
               >
-                Delete group
-              </Button>
-            ) : null
+                <Icon source="trash-can-outline" size={16} color="#DC2626" />
+                <Text style={styles.deleteButtonText}>Delete group</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.leaveGroupButton}
+                onPress={() => setLeaveVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Icon source="exit-to-app" size={16} color="#DC2626" />
+                <Text style={styles.leaveGroupButtonText}>Leave group</Text>
+              </TouchableOpacity>
+            )
           }
         />
       )}
 
       <Portal>
-        <Dialog visible={deleteVisible} onDismiss={() => setDeleteVisible(false)} style={styles.dialog}>
-          <Dialog.Title>Delete group</Dialog.Title>
-          <Dialog.Content>
-            <Text>This removes the group and its sharing permissions. Original cards are not deleted.</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDeleteVisible(false)}>Cancel</Button>
-            <Button textColor="#D32F2F" onPress={handleDeleteGroup}>Delete</Button>
-          </Dialog.Actions>
+        <Dialog
+          visible={leaveVisible}
+          onDismiss={() => { if (!leaving) setLeaveVisible(false); }}
+          style={styles.confirmDialog}
+        >
+          <View style={styles.confirmDialogContent}>
+            <View style={styles.confirmHeader}>
+              <View style={[styles.confirmIconContainer, { backgroundColor: '#FEE2E2' }]}>
+                <Icon source="exit-to-app" size={20} color="#DC2626" />
+              </View>
+              <Text style={styles.confirmDialogTitle}>Leave group</Text>
+            </View>
+            <Text style={styles.confirmDialogMessage}>
+              Are you sure you want to leave &quot;{group?.name || 'this group'}&quot;? You will lose access to all cards shared with this group, and any cards you shared here will be unshared.
+            </Text>
+            <View style={styles.confirmDialogActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setLeaveVisible(false)}
+                disabled={leaving}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                onPress={handleLeaveGroup}
+                disabled={leaving}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmActionText}>{leaving ? 'Leaving...' : 'Leave group'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Dialog>
+
+        <Dialog
+          visible={deleteVisible}
+          onDismiss={() => setDeleteVisible(false)}
+          style={styles.confirmDialog}
+        >
+          <View style={styles.confirmDialogContent}>
+            <View style={styles.confirmHeader}>
+              <View style={[styles.confirmIconContainer, { backgroundColor: '#FEE2E2' }]}>
+                <Icon source="trash-can-outline" size={20} color="#DC2626" />
+              </View>
+              <Text style={styles.confirmDialogTitle}>Delete group</Text>
+            </View>
+            <Text style={styles.confirmDialogMessage}>
+              Are you sure you want to delete &quot;{group?.name || 'this group'}&quot;? This permanently removes the group and its sharing permissions. Original cards in your wallet are not deleted.
+            </Text>
+            <View style={styles.confirmDialogActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setDeleteVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }]}
+                onPress={handleDeleteGroup}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmActionText}>Delete group</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Dialog>
       </Portal>
     </View>
@@ -595,11 +704,138 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteButton: {
-    marginTop: 16,
-    borderColor: '#D32F2F',
+    marginTop: 20,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
-  dialog: {
+  deleteButtonText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  leaveGroupButton: {
+    marginTop: 20,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  leaveGroupButtonText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  headerLeaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  headerLeaveText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  youBadge: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  youBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  memberLeaveRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  memberLeaveRowText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  confirmDialog: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginHorizontal: 24,
+  },
+  confirmDialogContent: {
+    padding: 0,
+  },
+  confirmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  confirmIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  confirmDialogMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  confirmDialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
