@@ -51,7 +51,8 @@ const App = () => {
             headerBackVisible: false,
             gestureEnabled: false,
             headerTitleAlign: 'center',
-            statusBarColor: 'white',
+            headerStyle: { backgroundColor: '#F4F5F7' },
+            statusBarColor: '#F4F5F7',
             statusBarStyle: 'dark'
           }} />
           <Stack.Screen name="Login" component={Login} options={{

@@ -10,6 +10,8 @@ export interface Card {
     key: string,
     isPersonal: boolean,
     email: string,
+    network?: string,
+    cardType?: string,
 }
 
 // Define the dictionary type

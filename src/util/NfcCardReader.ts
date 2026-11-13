@@ -1,4 +1,5 @@
 import NfcManager, { NfcTech } from 'react-native-nfc-manager';
+import { detectCardNetwork, detectCardType } from './Utils';
 
 export interface ScannedCardData {
   cardNumber: string;
@@ -6,7 +7,8 @@ export interface ScannedCardData {
   expiryYear: string;
   ownerName?: string;
   cardName?: string;
-  bankName?: string;
+  network?: string;
+  cardType?: string;
 }
 
 // Convert byte array to hexadecimal string
@@ -138,91 +140,6 @@ const PPSE_COMMAND = [
   0x00,
 ];
 
-// Bank BIN table (first 4 to 6 digits) mapped to CWallet bank keys in Constants.tsx
-const BANK_BINS: { [prefix: string]: string } = {
-  // HDFC Bank (HD)
-  '4052': 'HD', '4160': 'HD', '4375': 'HD', '4506': 'HD', '4507': 'HD', '4514': 'HD',
-  '4528': 'HD', '4554': 'HD', '4574': 'HD', '4629': 'HD', '4630': 'HD', '5125': 'HD',
-  '5456': 'HD', '5521': 'HD', '6071': 'HD', '6521': 'HD', '524140': 'HD', '524189': 'HD',
-
-  // ICICI Bank (IC)
-  '4059': 'IC', '4159': 'IC', '4202': 'IC', '4282': 'IC', '4315': 'IC', '4344': 'IC',
-  '4363': 'IC', '4386': 'IC', '4437': 'IC', '4477': 'IC', '4628': 'IC', '5181': 'IC',
-  '5245': 'IC', '5274': 'IC', '5346': 'IC', '5522': 'IC', '6070': 'IC',
-
-  // State Bank of India (SB)
-  '4001': 'SB', '4094': 'SB', '4214': 'SB', '4312': 'SB', '4346': 'SB', '4591': 'SB',
-  '4592': 'SB', '4726': 'SB', '5180': 'SB', '5432': 'SB', '6072': 'SB',
-
-  // Axis Bank (AX)
-  '4031': 'AX', '4165': 'AX', '4373': 'AX', '4482': 'AX', '5116': 'AX', '5262': 'AX',
-  '5497': 'AX', '527470': 'AX', '416540': 'AX',
-
-  // Kotak Mahindra Bank (KT)
-  '4166': 'KT', '5306': 'KT', '6073': 'KT', '438628': 'KT',
-
-  // IDFC First Bank (ID)
-  '4854': 'ID', '6076': 'ID', '421316': 'ID',
-
-  // Bank of Baroda (BB)
-  '4008': 'BB', '4018': 'BB', '6074': 'BB',
-
-  // IndusInd Bank (IN)
-  '4021': 'IN', '4035': 'IN', '4098': 'IN', '6075': 'IN',
-
-  // Federal Bank (FD)
-  '4063': 'FD', '6077': 'FD',
-
-  // RBL Bank (RL)
-  '4037': 'RL', '4075': 'RL', '6078': 'RL',
-
-  // HSBC Bank (HS)
-  '4010': 'HS', '6079': 'HS',
-
-  // Citi Bank (CT)
-  '4147': 'CT', '4385': 'CT', '4556': 'CT',
-
-  // AU Small Finance Bank (AU)
-  '6080': 'AU',
-
-  // Saraswat Bank (SW)
-  '607828': 'SW', '652170': 'SW',
-};
-
-// Detect bank from label, cardholder data or BIN
-export const detectBankFromCard = (pan: string, label: string = ''): string => {
-  const upperLabel = label.toUpperCase();
-
-  // 1. Check textual label from card chip
-  if (upperLabel.includes('HDFC')) return 'HD';
-  if (upperLabel.includes('ICICI')) return 'IC';
-  if (upperLabel.includes('AXIS')) return 'AX';
-  if (upperLabel.includes('KOTAK')) return 'KT';
-  if (upperLabel.includes('SBI') || upperLabel.includes('STATE BANK')) return 'SB';
-  if (upperLabel.includes('IDFC')) return 'ID';
-  if (upperLabel.includes('BARODA') || upperLabel.includes('BOB')) return 'BB';
-  if (upperLabel.includes('INDUSIND')) return 'IN';
-  if (upperLabel.includes('FEDERAL')) return 'FD';
-  if (upperLabel.includes('RBL')) return 'RL';
-  if (upperLabel.includes('HSBC')) return 'HS';
-  if (upperLabel.includes('CITI')) return 'CT';
-  if (upperLabel.includes('AU SMALL') || upperLabel.includes('AU BANK')) return 'AU';
-  if (upperLabel.includes('SARASWAT')) return 'SW';
-
-  // 2. Check 6-digit BIN, then 4-digit prefix
-  const cleanPan = pan.replace(/\D/g, '');
-  if (cleanPan.length >= 6) {
-    const bin6 = cleanPan.substring(0, 6);
-    if (BANK_BINS[bin6]) return BANK_BINS[bin6];
-  }
-  if (cleanPan.length >= 4) {
-    const bin4 = cleanPan.substring(0, 4);
-    if (BANK_BINS[bin4]) return BANK_BINS[bin4];
-  }
-
-  return '';
-};
-
 // Detect card branding
 export const detectCardName = (pan: string, label: string = ''): string => {
   if (label && label.length >= 3) {
@@ -244,6 +161,7 @@ export const detectCardName = (pan: string, label: string = ''): string => {
   if (/^(5[1-5]|2[2-7])/.test(cleanPan)) return 'Mastercard';
   if (/^(60|65|81|82|508)/.test(cleanPan)) return 'RuPay Card';
   if (/^(34|37)/.test(cleanPan)) return 'American Express';
+  if (/^(30[0-5]|3095|36|38|39)/.test(cleanPan)) return 'Diners Club';
   return 'Credit Card';
 };
 
@@ -582,8 +500,9 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
         // Validate collected card number with Luhn algorithm
         if (collectedData.cardNumber && isValidLuhn(collectedData.cardNumber)) {
           const rawLabel = collectedData.cardName || '';
-          const detectedBank = detectBankFromCard(collectedData.cardNumber, rawLabel);
           const detectedCardName = detectCardName(collectedData.cardNumber, rawLabel);
+          const detectedNetwork = detectCardNetwork(collectedData.cardNumber, rawLabel);
+          const detectedType = detectCardType(rawLabel);
 
           return {
             cardNumber: collectedData.cardNumber,
@@ -591,7 +510,8 @@ export const scanCardWithNfc = async (): Promise<ScannedCardData> => {
             expiryYear: collectedData.expiryYear || '',
             ownerName: collectedData.ownerName || '',
             cardName: detectedCardName,
-            bankName: detectedBank,
+            network: detectedNetwork,
+            cardType: detectedType,
           };
         }
       } catch {

@@ -7,12 +7,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { Card } from '../types/Types';
-import { FAB, Text, SegmentedButtons, Searchbar } from 'react-native-paper';
+import { FAB, Text, SegmentedButtons, Searchbar, Icon } from 'react-native-paper';
 import { isEmpty } from 'lodash';
-import { BANK_DICTIONARY } from '../constants/Constants';
+import { BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
+import { detectCardType } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -22,23 +23,40 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
   const [cardData, setCardData] = useState<Card[]>([]);
-  const [isCardPersonal, setIsCardPersonal] = useState('GRP');
+  const [isCardPersonal, setIsCardPersonal] = useState('PRL');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingScreen, setLoadingScreen] = useState('Loading cards');
   const { isConnected } = useContext(ConnectivityContext);
 
+  const getCardEffectiveType = (card: Card): string => {
+    if (card.cardType) return card.cardType.toUpperCase();
+    const detected = detectCardType(card.name);
+    if (detected) return detected.toUpperCase();
+    if (card.limit && Number(card.limit.replace(/\D/g, '')) > 0) return 'CREDIT';
+    return '';
+  };
+
   const filteredCards = cardData.filter((card) => {
     const query = searchQuery.toLowerCase();
+    const bankName = BANK_DICTIONARY[card.bankName]?.toLowerCase() || '';
+    const networkName = (card.network && (CARD_NETWORKS[card.network] || card.network))?.toLowerCase() || '';
+    const cardTypeName = (card.cardType && (CARD_TYPES[card.cardType] || card.cardType))?.toLowerCase() || '';
+
     return (
       card.ownerName.toLowerCase().includes(query) ||
-      BANK_DICTIONARY[card.bankName]?.toLowerCase().includes(query) ||
+      bankName.includes(query) ||
       card.number.includes(query) ||
       card.month.includes(query) ||
       card.year.includes(query) ||
       card.cvv.includes(query) ||
       card.name.toLowerCase().includes(query) ||
       card.limit.includes(query) ||
-      card.email.toLowerCase().includes(query)
+      card.email.toLowerCase().includes(query) ||
+      networkName.includes(query) ||
+      cardTypeName.includes(query) ||
+      (card.network && card.network.toLowerCase().includes(query)) ||
+      (card.cardType && card.cardType.toLowerCase().includes(query))
     );
   });
 
@@ -278,6 +296,18 @@ const Home: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const displayedCards = filteredCards
+    .filter((card) =>
+      isCardPersonal === 'PRL'
+        ? card.isPersonal && card.email === auth().currentUser?.email
+        : !card.isPersonal
+    )
+    .filter((card) => {
+      if (selectedTypeFilter === 'ALL') return true;
+      const effectiveType = getCardEffectiveType(card);
+      return effectiveType === selectedTypeFilter;
+    });
+
   return (
     <SafeAreaView style={styles.mainContainer}>
       <View style={{ flex: 1 }}>
@@ -299,21 +329,91 @@ const Home: React.FC<Props> = ({ navigation }) => {
           selectionColor="white"
         />
 
+        {/* Credit / Debit Filter Chips */}
+        <View style={styles.filterChipContainer}>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === 'ALL' && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter('ALL')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === 'ALL' && styles.filterChipTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === 'CREDIT' && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter(prev => prev === 'CREDIT' ? 'ALL' : 'CREDIT')}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source="credit-card-outline"
+              size={13}
+              color={selectedTypeFilter === 'CREDIT' ? '#FFFFFF' : '#4B5563'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === 'CREDIT' && styles.filterChipTextActive,
+              ]}
+            >
+              Credit
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === 'DEBIT' && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter(prev => prev === 'DEBIT' ? 'ALL' : 'DEBIT')}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source="credit-card-check-outline"
+              size={13}
+              color={selectedTypeFilter === 'DEBIT' ? '#FFFFFF' : '#4B5563'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === 'DEBIT' && styles.filterChipTextActive,
+              ]}
+            >
+              Debit
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <FlatList
-          data={filteredCards.filter((card) =>
-            isCardPersonal === 'PRL'
-              ? card.isPersonal && card.email === auth().currentUser?.email
-              : !card.isPersonal
-          )}
+          data={displayedCards}
           renderItem={({ item }) => (
-            <CustomCard cardDetails={item} onCardLongPress={showModal} />
+            <CustomCard cardDetails={item} onCardLongPress={showModal} onCardEdit={showModal} />
           )}
           keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1 }}
           ListEmptyComponent={
-            <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20 }}>{loadingScreen}</Text>
+            <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
+              <Icon source="credit-card-off-outline" size={44} color="#9CA3AF" />
+              <Text style={{ fontSize: 16, color: '#6B7280', marginTop: 10, textAlign: 'center' }}>
+                {cardData.length === 0
+                  ? loadingScreen
+                  : selectedTypeFilter !== 'ALL'
+                  ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'Personal' : 'Group'}`
+                  : `No cards found in ${isCardPersonal === 'PRL' ? 'Personal' : 'Group'}`}
+              </Text>
             </View>
           }
         />
@@ -323,15 +423,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
           onValueChange={setIsCardPersonal}
           buttons={[
             {
-              value: 'GRP',
-              label: 'Group',
-              style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#ffffff' },
+              value: 'PRL',
+              label: 'Personal',
+              style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#E5E7EB' },
               checkedColor: '#ffffff',
             },
             {
-              value: 'PRL',
-              label: 'Personal',
-              style: { backgroundColor: isCardPersonal === 'PRL' ? '#000000' : '#ffffff' },
+              value: 'GRP',
+              label: 'Group',
+              style: { backgroundColor: isCardPersonal === 'GRP' ? '#000000' : '#E5E7EB' },
               checkedColor: '#ffffff',
             },
           ]}
@@ -356,7 +456,7 @@ export default Home;
 
 const styles = StyleSheet.create({
   mainContainer: {
-    backgroundColor: 'white',
+    backgroundColor: '#F4F5F7',
     flex: 1,
   },
   fab: {
@@ -371,8 +471,35 @@ const styles = StyleSheet.create({
   searchBar: {
     marginHorizontal: 10,
     marginTop: 15,
-    marginBottom: 10,
+    marginBottom: 8,
     elevation: 2,
     backgroundColor: 'black',
+  },
+  filterChipContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 10,
+    marginBottom: 6,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 4,
+  },
+  filterChipActive: {
+    backgroundColor: '#000000',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
   },
 });

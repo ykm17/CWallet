@@ -1,10 +1,31 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Modal, Portal, Text, Button, TextInput, HelperText, Menu, Switch, Icon } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Keyboard,
+  Platform,
+  useWindowDimensions,
+  TouchableOpacity,
+  FlatList,
+} from 'react-native';
+import {
+  Modal,
+  Portal,
+  Text,
+  Button,
+  TextInput,
+  HelperText,
+  Menu,
+  Switch,
+  Icon,
+  Searchbar,
+} from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { Card } from '../types/Types';
-import { BANK_DICTIONARY } from '../constants/Constants';
-import { formatCardNumber } from '../util/Utils';
+import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
+import { formatCardNumber, detectCardNetwork, detectCardType } from '../util/Utils';
 import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan } from '../util/NfcCardReader';
 
 interface CardFormModalProps {
@@ -26,6 +47,8 @@ const EMPTY_CARD: Card = {
   key: '',
   isPersonal: true,
   email: '',
+  network: '',
+  cardType: '',
 };
 
 const CardFormModal: React.FC<CardFormModalProps> = ({
@@ -34,16 +57,50 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
   cardToEdit,
   onSubmit,
 }) => {
+  const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [formKey, setFormKey] = useState(0);
   const cardRef = useRef<Card>({ ...EMPTY_CARD });
   const [card, setCard] = useState<Card>(EMPTY_CARD);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [dropDownVisible, setDropDownVisible] = useState(false);
+  const [bankPickerVisible, setBankPickerVisible] = useState(false);
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
+  const [networkMenuVisible, setNetworkMenuVisible] = useState(false);
+  const [typeMenuVisible, setTypeMenuVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [nfcScanning, setNfcScanning] = useState(false);
   const [nfcStatusText, setNfcStatusText] = useState('');
 
   const isUpdate = Boolean(cardToEdit && cardToEdit.key);
+
+  const filteredBankKeys = useMemo(() => {
+    const q = bankSearchQuery.trim().toLowerCase();
+    const allKeys = Object.keys(BANK_DICTIONARY);
+    if (!q) {
+      return allKeys;
+    }
+    return allKeys.filter(key => {
+      const name = BANK_DICTIONARY[key]?.toLowerCase() || '';
+      return name.includes(q) || key.toLowerCase().includes(q);
+    });
+  }, [bankSearchQuery]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -52,15 +109,22 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       setCard(initial);
       setFormKey(k => k + 1);
       setTouched({});
-      setDropDownVisible(false);
+      setBankPickerVisible(false);
+      setBankSearchQuery('');
+      setNetworkMenuVisible(false);
+      setTypeMenuVisible(false);
       setSubmitting(false);
       setNfcScanning(false);
       setNfcStatusText('');
+      setKeyboardHeight(0);
     }
   }, [visible, cardToEdit]);
 
-  const openMenu = () => setDropDownVisible(true);
-  const closeMenu = () => setDropDownVisible(false);
+  const openNetworkMenu = () => setNetworkMenuVisible(true);
+  const closeNetworkMenu = () => setNetworkMenuVisible(false);
+
+  const openTypeMenu = () => setTypeMenuVisible(true);
+  const closeTypeMenu = () => setTypeMenuVisible(false);
 
   const handleBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
@@ -103,8 +167,9 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
         ...(scannedData.expiryMonth ? { month: scannedData.expiryMonth } : {}),
         ...(scannedData.expiryYear ? { year: scannedData.expiryYear } : {}),
         ...(scannedData.ownerName ? { ownerName: scannedData.ownerName } : {}),
-        ...(scannedData.bankName ? { bankName: scannedData.bankName } : {}),
         ...(scannedData.cardName ? { name: scannedData.cardName } : {}),
+        ...(scannedData.network ? { network: scannedData.network } : {}),
+        ...(scannedData.cardType ? { cardType: scannedData.cardType } : {}),
       };
       cardRef.current = updated;
       setCard(updated);
@@ -130,8 +195,13 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     if (isEmpty(card.bankName)) {
       errs.bankName = 'Please select bank name';
     }
-    if (isEmpty(card.number) || !/^(\d{4}\s?){3}\d{4}$/.test(card.number) || card.number.length !== 19) {
-      errs.number = 'Card number is empty or invalid';
+    const cleanNumber = card.number.replace(/\D/g, '');
+    const isDiners = cleanNumber.length === 14;
+    const isAmex = cleanNumber.length === 15;
+    const isStandard = cleanNumber.length === 16;
+
+    if (isEmpty(card.number) || (!isDiners && !isAmex && !isStandard)) {
+      errs.number = 'Card number must be 14 (Diners Club), 15 (Amex), or 16 digits';
     }
     if (isEmpty(card.month) || !/^(0[1-9]|1[0-2])$/.test(card.month) || card.month.length !== 2) {
       errs.month = 'Card month is empty or invalid';
@@ -170,55 +240,189 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     }
   };
 
+  const isKeyboardOpen = keyboardHeight > 0;
+
+  const modalWrapperStyle = useMemo(() => {
+    if (isKeyboardOpen) {
+      return {
+        justifyContent: 'flex-start' as const,
+        paddingTop: Platform.OS === 'ios' ? 44 : 20,
+      };
+    }
+    return {
+      justifyContent: 'center' as const,
+    };
+  }, [isKeyboardOpen]);
+
+  const modalContentStyle = useMemo(() => {
+    if (isKeyboardOpen) {
+      const topPadding = Platform.OS === 'ios' ? 44 : 20;
+      const availableHeight = windowHeight - keyboardHeight - topPadding - 24;
+      return [
+        styles.containerStyle,
+        {
+          maxHeight: Math.max(availableHeight, 260),
+          marginBottom: 10,
+        },
+      ];
+    }
+    return [
+      styles.containerStyle,
+      {
+        maxHeight: windowHeight * 0.85,
+        marginBottom: 20,
+      },
+    ];
+  }, [isKeyboardOpen, windowHeight, keyboardHeight]);
+
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.containerStyle}>
-        <Text style={styles.modelTitle} variant="headlineMedium">
-          {`${isUpdate ? 'Update your' : 'Add new'} card.`}
-        </Text>
-
-        {!isUpdate && (
-          <Button
-            icon="nfc"
-            mode="contained"
-            onPress={handleNfcScan}
-            style={styles.nfcScanButton}
-            labelStyle={{ color: 'white', fontWeight: 'bold' }}
+      <Modal
+        visible={visible}
+        onDismiss={onDismiss}
+        style={modalWrapperStyle}
+        contentContainerStyle={modalContentStyle}
+      >
+        <View style={styles.modalHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>
+              {isUpdate ? 'Edit Card' : 'Add New Card'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              {isUpdate ? 'Update your card details' : 'Save your card details securely'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.closeModalBtn}
+            onPress={onDismiss}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            Scan with NFC (Tap card on phone)
-          </Button>
-        )}
+            <Icon source="close" size={20} color="#555555" />
+          </TouchableOpacity>
+        </View>
 
-        <ScrollView keyboardShouldPersistTaps="handled">
-          <View style={[styles.formElements, { marginBottom: 10 }]}>
-            <Menu
-              contentStyle={{ backgroundColor: 'white' }}
-              visible={dropDownVisible}
-              onDismiss={closeMenu}
-              anchor={
-                <Button onPress={openMenu} style={styles.dropDownButton} labelStyle={{ color: 'white', width: '100%' }}>
-                  {BANK_DICTIONARY[card.bankName] ?? 'Select Bank'}
-                </Button>
-              }
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+        >
+          {!isUpdate && (
+            <Button
+              icon="nfc"
+              mode="contained"
+              onPress={handleNfcScan}
+              style={styles.nfcScanButton}
+              labelStyle={{ color: 'white', fontWeight: 'bold' }}
             >
-              {Object.keys(BANK_DICTIONARY).map((item, index) => (
-                <Menu.Item
-                  onPress={() => {
-                    cardRef.current.bankName = item;
-                    setCard(prev => ({ ...prev, bankName: item }));
-                    closeMenu();
-                  }}
-                  title={BANK_DICTIONARY[item]}
-                  key={index}
-                />
-              ))}
-            </Menu>
+              Scan with NFC (Tap card on phone)
+            </Button>
+          )}
+
+          <View style={[styles.formElements, { marginBottom: 10 }]}>
+            <TouchableOpacity
+              style={[
+                styles.bankSelectorButton,
+                touched.bankName && errors.bankName && styles.bankSelectorButtonError,
+              ]}
+              onPress={() => setBankPickerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.bankSelectorLeft}>
+                {card.bankName && BANK_COLORS[card.bankName] ? (
+                  <View style={[styles.bankColorDot, { backgroundColor: BANK_COLORS[card.bankName] }]} />
+                ) : (
+                  <Icon source="bank" size={18} color="#888888" />
+                )}
+                <Text style={[styles.bankSelectorText, !card.bankName && styles.bankSelectorPlaceholder]}>
+                  {BANK_DICTIONARY[card.bankName] ?? 'Select Bank'}
+                </Text>
+              </View>
+              <Icon source="chevron-down" size={20} color="#888888" />
+            </TouchableOpacity>
           </View>
           {touched.bankName && errors.bankName && (
             <HelperText type="error">
               {errors.bankName}
             </HelperText>
           )}
+
+          <View style={[styles.row, { marginBottom: 10 }]}>
+            <View style={styles.halfWidth}>
+              <Menu
+                contentStyle={styles.menuContent}
+                visible={networkMenuVisible}
+                onDismiss={closeNetworkMenu}
+                anchor={
+                  <TouchableOpacity
+                    onPress={openNetworkMenu}
+                    style={styles.pickerSelectorButton}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerSelectorText,
+                        !card.network && styles.pickerSelectorPlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {CARD_NETWORKS[card.network || ''] ?? 'Network'}
+                    </Text>
+                    <Icon source="chevron-down" size={16} color="#888888" />
+                  </TouchableOpacity>
+                }
+              >
+                {Object.keys(CARD_NETWORKS).map((key) => (
+                  <Menu.Item
+                    onPress={() => {
+                      cardRef.current.network = key;
+                      setCard(prev => ({ ...prev, network: key }));
+                      closeNetworkMenu();
+                    }}
+                    title={CARD_NETWORKS[key]}
+                    key={key}
+                  />
+                ))}
+              </Menu>
+            </View>
+
+            <View style={styles.halfWidth}>
+              <Menu
+                contentStyle={styles.menuContent}
+                visible={typeMenuVisible}
+                onDismiss={closeTypeMenu}
+                anchor={
+                  <TouchableOpacity
+                    onPress={openTypeMenu}
+                    style={styles.pickerSelectorButton}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerSelectorText,
+                        !card.cardType && styles.pickerSelectorPlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {CARD_TYPES[card.cardType || ''] ?? 'Type'}
+                    </Text>
+                    <Icon source="chevron-down" size={16} color="#888888" />
+                  </TouchableOpacity>
+                }
+              >
+                {Object.keys(CARD_TYPES).map((key) => (
+                  <Menu.Item
+                    onPress={() => {
+                      cardRef.current.cardType = key;
+                      setCard(prev => ({ ...prev, cardType: key }));
+                      closeTypeMenu();
+                    }}
+                    title={CARD_TYPES[key]}
+                    key={key}
+                  />
+                ))}
+              </Menu>
+            </View>
+          </View>
 
           <TextInput
             key={`ownerName-${formKey}`}
@@ -248,11 +452,19 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             key={`number-${formKey}`}
             label="Card Number"
             value={card.number}
-            placeholder="0000 0000 0000 0000"
+            placeholder="14, 15, or 16 digit card number"
             onChangeText={text => {
               const formatted = formatCardNumber(text);
+              const detectedNet = detectCardNetwork(formatted);
               cardRef.current.number = formatted;
-              setCard(prev => ({ ...prev, number: formatted }));
+              setCard(prev => {
+                const next = { ...prev, number: formatted };
+                if (detectedNet && !prev.network) {
+                  next.network = detectedNet;
+                  cardRef.current.network = detectedNet;
+                }
+                return next;
+              });
             }}
             maxLength={19}
             keyboardType="numeric"
@@ -318,8 +530,8 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
 
           <TextInput
             key={`cvv-${formKey}`}
-            label="CVV"
-            placeholder="000"
+            label="CVV / CID"
+            placeholder="000 or 0000"
             defaultValue={card.cvv}
             onChangeText={text => {
               const cleaned = text.replace(/[^0-9]/g, '');
@@ -397,14 +609,15 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           </View>
 
           <Button
-            icon="send-circle"
+            icon={isUpdate ? 'check-circle-outline' : 'plus-circle-outline'}
             mode="contained"
             onPress={handleFormSubmit}
             disabled={!isFormValid || submitting}
             loading={submitting}
-            style={styles.button}
+            style={[styles.button, isFormValid && !submitting && styles.buttonActive]}
+            labelStyle={styles.buttonLabel}
           >
-            Submit
+            {isUpdate ? 'Update Card' : 'Save Card'}
           </Button>
         </ScrollView>
       </Modal>
@@ -430,6 +643,83 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           </Button>
         </View>
       </Modal>
+
+      {/* Searchable Bank Picker Modal */}
+      <Modal
+        visible={bankPickerVisible}
+        onDismiss={() => {
+          setBankPickerVisible(false);
+          setBankSearchQuery('');
+        }}
+        contentContainerStyle={styles.bankPickerModal}
+      >
+        <View style={styles.bankPickerHeader}>
+          <Text style={styles.bankPickerTitle} variant="titleLarge">
+            Select Bank
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setBankPickerVisible(false);
+              setBankSearchQuery('');
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon source="close" size={22} color="#333333" />
+          </TouchableOpacity>
+        </View>
+
+        <Searchbar
+          placeholder="Search bank (e.g. HDFC, SBI)..."
+          value={bankSearchQuery}
+          onChangeText={setBankSearchQuery}
+          style={styles.bankSearchBar}
+          inputStyle={styles.bankSearchInput}
+          iconColor="#666666"
+          autoCapitalize="none"
+        />
+
+        <FlatList
+          data={filteredBankKeys}
+          keyExtractor={item => item}
+          keyboardShouldPersistTaps="handled"
+          style={styles.bankList}
+          contentContainerStyle={styles.bankListContent}
+          renderItem={({ item }) => {
+            const isSelected = card.bankName === item;
+            const name = BANK_DICTIONARY[item];
+            const color = BANK_COLORS[item] || '#333333';
+
+            return (
+              <TouchableOpacity
+                style={[styles.bankItemRow, isSelected && styles.bankItemRowSelected]}
+                onPress={() => {
+                  cardRef.current.bankName = item;
+                  setCard(prev => ({ ...prev, bankName: item }));
+                  setBankPickerVisible(false);
+                  setBankSearchQuery('');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.bankItemDot, { backgroundColor: color }]} />
+                <Text style={[styles.bankItemText, isSelected && styles.bankItemTextSelected]}>
+                  {name}
+                </Text>
+                {isSelected && (
+                  <Icon source="check-circle" size={20} color="#0033A0" />
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.bankEmptyContainer}>
+              <Icon source="magnify-close" size={36} color="#999999" />
+              <Text style={styles.bankEmptyText}>
+                No bank found matching "{bankSearchQuery}"
+              </Text>
+            </View>
+          }
+        />
+      </Modal>
     </Portal>
   );
 };
@@ -438,18 +728,45 @@ export default CardFormModal;
 
 const styles = StyleSheet.create({
   containerStyle: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginHorizontal: 10,
-    marginBottom: 40,
-    marginTop: 10,
-    borderRadius: 10,
-    maxHeight: '90%',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 10,
+    marginHorizontal: 12,
+    borderRadius: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
   modelTitle: {
-    fontSize: 22,
+    fontSize: 20,
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   formElements: {
     marginVertical: 4,
@@ -462,14 +779,49 @@ const styles = StyleSheet.create({
   halfWidth: {
     flex: 1,
   },
+  pickerSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  pickerSelectorText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  pickerSelectorPlaceholder: {
+    color: '#AAAAAA',
+    fontWeight: 'normal',
+  },
+  menuContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+  },
   dropDownButton: {
-    backgroundColor: '#6750a4',
-    borderRadius: 5,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
     width: '100%',
   },
   button: {
     marginTop: 16,
     marginBottom: 8,
+    backgroundColor: '#6B7280',
+    borderRadius: 8,
+    paddingVertical: 2,
+  },
+  buttonActive: {
+    backgroundColor: '#000000',
+  },
+  buttonLabel: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
   nfcScanButton: {
     backgroundColor: '#0066cc',
@@ -498,5 +850,112 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#0066cc',
     fontWeight: '500',
+  },
+  bankSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#000000',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  bankSelectorButtonError: {
+    borderWidth: 1,
+    borderColor: '#B00020',
+  },
+  bankSelectorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  bankColorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 10,
+  },
+  bankSelectorText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bankSelectorPlaceholder: {
+    color: '#AAAAAA',
+    fontWeight: 'normal',
+  },
+  bankPickerModal: {
+    backgroundColor: '#F8F9FA',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    maxHeight: '85%',
+  },
+  bankPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  bankPickerTitle: {
+    fontWeight: 'bold',
+    color: '#111111',
+    fontSize: 18,
+  },
+  bankSearchBar: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    marginBottom: 10,
+    elevation: 0,
+    height: 44,
+  },
+  bankSearchInput: {
+    minHeight: 44,
+    fontSize: 14,
+  },
+  bankList: {
+    maxHeight: 360,
+  },
+  bankListContent: {
+    paddingBottom: 16,
+  },
+  bankItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  bankItemRowSelected: {
+    backgroundColor: '#EEF2FF',
+  },
+  bankItemDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  bankItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#222222',
+  },
+  bankItemTextSelected: {
+    fontWeight: 'bold',
+    color: '#0033A0',
+  },
+  bankEmptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+  },
+  bankEmptyText: {
+    color: '#888888',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
