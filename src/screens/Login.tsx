@@ -5,7 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../App'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import auth from '@react-native-firebase/auth'
-import firestore from '@react-native-firebase/firestore'
+import firestore, { getFirestore, doc, getDoc } from '@react-native-firebase/firestore'
 import { Text, Snackbar } from 'react-native-paper'
 import { checkBiometricAvailability, authenticateWithBiometrics } from '../util/Biometric'
 import { ConnectivityContext } from '../util/Connectivity'
@@ -79,8 +79,9 @@ const Login: React.FC<Props> = () => {
             const currentUser = userCredential.user
 
             if (currentUser?.email) {
-                const accessDoc = await firestore().collection('accessList').doc(currentUser.email).get()
-                if (accessDoc.exists) {
+                const db = getFirestore()
+                const accessDoc = await getDoc(doc(db, 'accessList', currentUser.email))
+                if (accessDoc.exists()) {
                     console.log('User has access, navigating to Home')
                     navigation.navigate('Home' as never)
                 } else {

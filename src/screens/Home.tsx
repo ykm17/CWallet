@@ -10,7 +10,7 @@ import { Card } from '../types/Types';
 import { FAB, Modal, Portal, Text, Button, TextInput, HelperText, Menu, SegmentedButtons, Switch, Searchbar } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { BANK_DICTIONARY, ENV } from '../constants/Constants';
-import firestore from '@react-native-firebase/firestore';
+import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
 import { formatCardNumber } from '../util/Utils';
 import { decryptCardData, encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
@@ -19,7 +19,7 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const Home: React.FC<Props> = ({ navigation }) => {
-  const cardsCollection = firestore().collection('cards');
+  const db = getFirestore();
   const isModelForUpdate = useRef(false);
   const openMenu = () => setDropDownVisible(true);
   const closeMenu = () => setDropDownVisible(false);
@@ -149,9 +149,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
     try {
       if (isConnected) {
         console.log("Fetching cards for user:", auth().currentUser?.uid);
-        const unsubscribe = cardsCollection
-          .where('ownerId', '==', auth().currentUser?.uid)
-          .onSnapshot((snapshot) => {
+        const q = query(collection(db, 'cards'), where('ownerId', '==', auth().currentUser?.uid));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             console.log("Snapshot received:", snapshot.size, "documents");
             const cards: Card[] = [];
             
@@ -279,7 +278,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
         const cardData = {
           ownerId: auth().currentUser?.uid,
           encryptedData,
-          addedAt: firestore.FieldValue.serverTimestamp(),
+          addedAt: serverTimestamp(),
           isPersonal: card.isPersonal,
           sharedGroupIds: []  
         };
@@ -288,11 +287,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         if (isModelForUpdate.current) {
           console.log("Updating existing card:", card.key);
-          await cardsCollection.doc(card.key).update(cardData);
+          await updateDoc(doc(db, 'cards', card.key), cardData);
           isModelForUpdate.current = false;
         } else {
           console.log("Creating new card");
-          await cardsCollection.add(cardData);
+          await addDoc(collection(db, 'cards'), cardData);
         }
 
         setIsCardPersonal(card.isPersonal ? 'PRL' : 'GRP');

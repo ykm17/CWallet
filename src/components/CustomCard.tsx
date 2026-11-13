@@ -5,7 +5,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, removeSpaceFromString } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
-import firestore from '@react-native-firebase/firestore';
+import { getFirestore, doc, deleteDoc } from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
 
@@ -18,7 +18,6 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
   const [visible, setVisible] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const isConnected = useContext(ConnectivityContext).isConnected;
-  const cardsCollection = firestore().collection('cards');
 
   const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
@@ -34,7 +33,8 @@ const CustomCard: React.FC<CardProps> = ({ cardDetails, onCardLongPress }) => {
   const handleDelete = async () => {
     try {
       if (isConnected) {
-        await cardsCollection.doc(cardDetails.key).delete();
+        const db = getFirestore();
+        await deleteDoc(doc(db, 'cards', cardDetails.key));
       }
       hideDialog();
     } catch (error) {
