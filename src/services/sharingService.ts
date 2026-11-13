@@ -190,6 +190,31 @@ export const shareCardsWithGroup = async (cardIds: string[], groupId: string): P
   return { shared, skipped };
 };
 
+export const shareCardsWithGroups = async (
+  cardIds: string[],
+  groupIds: string[],
+): Promise<{ shared: number; skipped: number }> => {
+  const uniqueCardIds = uniqueIds(cardIds);
+  const uniqueGroupIds = uniqueIds(groupIds);
+  if (uniqueCardIds.length === 0) {
+    throw new Error('Select at least one card.');
+  }
+  if (uniqueGroupIds.length === 0) {
+    throw new Error('Select at least one group.');
+  }
+
+  let totalShared = 0;
+  let totalSkipped = 0;
+
+  for (const groupId of uniqueGroupIds) {
+    const result = await shareCardsWithGroup(uniqueCardIds, groupId);
+    totalShared += result.shared;
+    totalSkipped += result.skipped;
+  }
+
+  return { shared: totalShared, skipped: totalSkipped };
+};
+
 export const syncCardGroupAccess = async (cardId: string, nextGroupIds: string[]): Promise<void> => {
   const uid = requireUid();
   await assertOwnsCard(cardId, uid);
@@ -273,6 +298,26 @@ export const unshareCardsFromGroup = async (cardIds: string[], groupId: string):
     await batch.commit();
   }
   return uniqueCardIds.length;
+};
+
+export const unshareCardsFromGroups = async (
+  cardIds: string[],
+  groupIds: string[],
+): Promise<number> => {
+  const uniqueCardIds = uniqueIds(cardIds);
+  const uniqueGroupIds = uniqueIds(groupIds);
+  if (uniqueCardIds.length === 0 || uniqueGroupIds.length === 0) return 0;
+
+  if (uniqueGroupIds.includes('__ALL__')) {
+    return unshareCardsFromAllGroups(uniqueCardIds);
+  }
+
+  let totalCount = 0;
+  for (const groupId of uniqueGroupIds) {
+    const count = await unshareCardsFromGroup(uniqueCardIds, groupId);
+    totalCount += count;
+  }
+  return totalCount;
 };
 
 export const unshareCardsFromAllGroups = async (cardIds: string[]): Promise<number> => {

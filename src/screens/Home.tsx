@@ -1,6 +1,7 @@
-import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { Alert } from '../components/CustomAlert';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
 import ShareCardModal from '../components/ShareCardModal';

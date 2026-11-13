@@ -12,6 +12,7 @@ import ShareToGroup from './screens/ShareToGroup';
 import UnshareFromGroup from './screens/UnshareFromGroup';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
+import CustomAlertHost from './components/CustomAlert';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -85,6 +86,7 @@ const App = () => {
             />
           </Stack.Navigator>
         </NavigationContainer>
+        <CustomAlertHost />
       </ConnectivityProvider>
     </SafeAreaProvider>
   );

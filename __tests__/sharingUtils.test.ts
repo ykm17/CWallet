@@ -33,4 +33,36 @@ describe('sharing helpers', () => {
   it('lets owners share in owner-controlled mode', () => {
     expect(canShareToGroup(group({ contributionPermission: CONTRIBUTION.OWNER_ONLY }), 'owner')).toBe(true);
   });
+
+  it('correctly computes mapping pairs for multiple cards across multiple groups', () => {
+    const cardIds = ['c1', 'c2'];
+    const groupIds = ['g1', 'g2', 'g3'];
+    const cards = [
+      { key: 'c1', sharedGroupIds: ['g1'] },
+      { key: 'c2', sharedGroupIds: [] },
+    ];
+
+    const pairs: Array<{ cardId: string; groupId: string }> = [];
+    for (const cardId of cardIds) {
+      const card = cards.find((c) => c.key === cardId);
+      const cardSharedGroupIds = card?.sharedGroupIds || [];
+      for (const groupId of groupIds) {
+        if (!cardSharedGroupIds.includes(groupId)) {
+          pairs.push({ cardId, groupId });
+        }
+      }
+    }
+
+    // c1 is already in g1, so c1 gets (c1, g2), (c1, g3) = 2
+    // c2 gets (c2, g1), (c2, g2), (c2, g3) = 3
+    // Total = 5 new pairs
+    expect(pairs).toHaveLength(5);
+    expect(pairs).toEqual([
+      { cardId: 'c1', groupId: 'g2' },
+      { cardId: 'c1', groupId: 'g3' },
+      { cardId: 'c2', groupId: 'g1' },
+      { cardId: 'c2', groupId: 'g2' },
+      { cardId: 'c2', groupId: 'g3' },
+    ]);
+  });
 });

@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Alert } from './CustomAlert';
 import { Button, Icon, Modal, Portal, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
 import { Card, Group } from '../types/Types';

@@ -1,5 +1,6 @@
-import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, Alert, ScrollView } from 'react-native'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView } from 'react-native'
 import React, { useContext, useState } from 'react'
+import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, formatCardLimit, removeSpaceFromString } from '../util/Utils'

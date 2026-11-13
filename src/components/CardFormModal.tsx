@@ -3,13 +3,13 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
   Keyboard,
   Platform,
   useWindowDimensions,
   TouchableOpacity,
   FlatList,
 } from 'react-native';
+import { Alert } from './CustomAlert';
 import {
   Modal,
   Portal,

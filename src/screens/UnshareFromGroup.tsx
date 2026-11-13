@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Icon, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -8,19 +9,12 @@ import { RootStackParamList } from '../App';
 import { Card, Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { parseCardDocument } from '../services/cardService';
-import { unshareCardsFromGroup, unshareCardsFromAllGroups } from '../services/sharingService';
+import { unshareCardsFromGroups } from '../services/sharingService';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
 import { ConnectivityContext } from '../util/Connectivity';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UnshareFromGroup'>;
-
-interface GroupOption {
-  groupId: string;
-  name: string;
-  subtitle: string;
-  isAll?: boolean;
-}
 
 const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   const uid = auth().currentUser?.uid || '';
@@ -30,7 +24,9 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   const { groups } = useUserGroups();
   const [ownedCards, setOwnedCards] = useState<Card[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(lockedGroupId || '__ALL__');
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(
+    lockedGroupId ? [lockedGroupId] : [],
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -64,65 +60,33 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     [groups],
   );
 
-  const lockedGroup = useMemo(
-    () => groups.find((g) => g.groupId === lockedGroupId),
+  const availableGroups = useMemo(
+    () => (lockedGroupId ? groups.filter((g) => g.groupId === lockedGroupId) : groups),
     [groups, lockedGroupId],
   );
 
-  const groupOptions = useMemo<GroupOption[]>(() => {
-    if (lockedGroupId) {
-      return [
-        {
-          groupId: lockedGroupId,
-          name: lockedGroup?.name || 'Selected group',
-          subtitle: lockedGroup ? `${lockedGroup.memberCount} members · Selected group` : 'Selected group',
-        },
-      ];
-    }
-
-    const options: GroupOption[] = [
-      {
-        groupId: '__ALL__',
-        name: 'All groups',
-        subtitle: 'Remove card access from all groups at once',
-        isAll: true,
-      },
-    ];
-
-    groups.forEach((g) => {
-      options.push({
-        groupId: g.groupId,
-        name: g.name,
-        subtitle: `${g.memberCount} members · ${g.ownerId === uid ? 'Your group' : 'Joined group'}`,
-      });
-    });
-
-    return options;
-  }, [lockedGroupId, lockedGroup, groups, uid]);
-
-  const targetGroupName = useMemo(() => {
-    if (selectedGroupId === '__ALL__') return 'all groups';
-    const group = groups.find((g) => g.groupId === selectedGroupId);
-    return group?.name || 'selected group';
-  }, [selectedGroupId, groups]);
-
-  const isCardEligible = (card: Card) => {
-    const sharedIds = card.sharedGroupIds || [];
-    if (sharedIds.length === 0) return false;
-    if (selectedGroupId === '__ALL__') return true;
-    return sharedIds.includes(selectedGroupId);
-  };
-
-  const eligibleCards = useMemo(
-    () => ownedCards.filter((card) => isCardEligible(card)),
-    [ownedCards, selectedGroupId],
+  const selectedGroups = useMemo(
+    () => availableGroups.filter((g) => selectedGroupIds.includes(g.groupId)),
+    [availableGroups, selectedGroupIds],
   );
 
-  const eligibleSelectedCards = useMemo(() => {
-    return ownedCards.filter((card) => selectedCardIds.includes(card.key) && isCardEligible(card));
-  }, [ownedCards, selectedCardIds, selectedGroupId]);
+  const selectedGroup = selectedGroups[0];
 
-  const ineligibleSelectedCount = selectedCardIds.length - eligibleSelectedCards.length;
+  // List of { cardId, groupId } pairs that will be unshared
+  const unsharePairs = useMemo(() => {
+    if (selectedGroupIds.length === 0 || selectedCardIds.length === 0) return [];
+    const pairs: Array<{ cardId: string; groupId: string }> = [];
+    for (const cardId of selectedCardIds) {
+      const card = ownedCards.find((c) => c.key === cardId);
+      const cardSharedGroupIds = card?.sharedGroupIds || [];
+      for (const groupId of selectedGroupIds) {
+        if (cardSharedGroupIds.includes(groupId)) {
+          pairs.push({ cardId, groupId });
+        }
+      }
+    }
+    return pairs;
+  }, [selectedCardIds, selectedGroupIds, ownedCards]);
 
   const toggleCard = (cardId: string) => {
     setSelectedCardIds((prev) => (
@@ -130,11 +94,27 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     ));
   };
 
-  const handleToggleSelectAll = () => {
-    if (eligibleSelectedCards.length === eligibleCards.length) {
+  const handleToggleSelectAllCards = () => {
+    if (selectedCardIds.length === ownedCards.length) {
       setSelectedCardIds([]);
     } else {
-      setSelectedCardIds(eligibleCards.map((c) => c.key));
+      setSelectedCardIds(ownedCards.map((c) => c.key));
+    }
+  };
+
+  const toggleGroup = (groupId: string) => {
+    if (lockedGroupId) return;
+    setSelectedGroupIds((prev) => (
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    ));
+  };
+
+  const handleToggleSelectAllGroups = () => {
+    if (lockedGroupId) return;
+    if (selectedGroupIds.length === availableGroups.length) {
+      setSelectedGroupIds([]);
+    } else {
+      setSelectedGroupIds(availableGroups.map((g) => g.groupId));
     }
   };
 
@@ -143,23 +123,28 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
       Alert.alert('Offline', 'You must be online to unshare cards from groups.');
       return;
     }
-    if (!selectedGroupId) {
-      Alert.alert('Select a group', 'Please select a group or "All groups" to unshare from.');
+    if (selectedGroupIds.length === 0) {
+      Alert.alert('Select groups', 'Please select at least one group to unshare from.');
       return;
     }
-    if (eligibleSelectedCards.length === 0) {
+    if (selectedCardIds.length === 0) {
+      Alert.alert('Select cards', 'Choose at least one card to unshare.');
+      return;
+    }
+    if (unsharePairs.length === 0) {
       Alert.alert(
-        'No cards to unshare',
-        `Select at least one card that is shared with ${targetGroupName}.`,
+        'Not in selected groups',
+        'None of the selected cards are currently shared with the selected group(s).',
       );
       return;
     }
 
-    const cardCount = eligibleSelectedCards.length;
-    const confirmMessage =
-      selectedGroupId === '__ALL__'
-        ? `Unshare ${cardCount} card${cardCount === 1 ? '' : 's'} from all groups? Group members will no longer be able to view them. Card ownership will remain with you.`
-        : `Unshare ${cardCount} card${cardCount === 1 ? '' : 's'} from ${targetGroupName}? Group members will no longer be able to view them. Card ownership will remain with you.`;
+    const groupNamesText = selectedGroups.length <= 2
+      ? selectedGroups.map((g) => g.name).join(' & ')
+      : `${selectedGroups.length} groups (${selectedGroups.map((g) => g.name).join(', ')})`;
+
+    const cardIdsToUnshare = Array.from(new Set(unsharePairs.map((p) => p.cardId)));
+    const confirmMessage = `Unshare ${cardIdsToUnshare.length} card${cardIdsToUnshare.length === 1 ? '' : 's'} from ${groupNamesText}? (${unsharePairs.length} group mapping${unsharePairs.length === 1 ? '' : 's'}). Group members will no longer be able to view them.`;
 
     Alert.alert(
       'Confirm Unshare',
@@ -172,22 +157,12 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           onPress: async () => {
             try {
               setSaving(true);
-              const cardIdsToUnshare = eligibleSelectedCards.map((c) => c.key);
-              if (selectedGroupId === '__ALL__') {
-                const count = await unshareCardsFromAllGroups(cardIdsToUnshare);
-                Alert.alert(
-                  'Cards unshared',
-                  `${count} card${count === 1 ? '' : 's'} unshared from all groups.`,
-                  [{ text: 'OK', onPress: () => navigation.goBack() }],
-                );
-              } else {
-                const count = await unshareCardsFromGroup(cardIdsToUnshare, selectedGroupId);
-                Alert.alert(
-                  'Cards unshared',
-                  `${count} card${count === 1 ? '' : 's'} unshared from ${targetGroupName}.`,
-                  [{ text: 'OK', onPress: () => navigation.goBack() }],
-                );
-              }
+              await unshareCardsFromGroups(cardIdsToUnshare, selectedGroupIds);
+              Alert.alert(
+                'Cards unshared',
+                `${cardIdsToUnshare.length} card${cardIdsToUnshare.length === 1 ? '' : 's'} unshared across ${selectedGroups.length} group${selectedGroups.length === 1 ? '' : 's'}.`,
+                [{ text: 'OK', onPress: () => navigation.goBack() }],
+              );
             } catch (error: any) {
               Alert.alert('Could not unshare cards', error.message || 'Please try again.');
             } finally {
@@ -200,61 +175,41 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const renderCard = ({ item }: { item: Card }) => {
-    const eligible = isCardEligible(item);
-    const selected = selectedCardIds.includes(item.key) && eligible;
-    const sharedGroupNames = (item.sharedGroupIds || [])
+    const selected = selectedCardIds.includes(item.key);
+    const cardSharedGroupIds = item.sharedGroupIds || [];
+    const isShared = cardSharedGroupIds.length > 0;
+    const sharedGroupNames = cardSharedGroupIds
       .map((gid) => groupNameById[gid])
       .filter(Boolean);
-    const isSharedAnywhere = (item.sharedGroupIds || []).length > 0;
 
     return (
       <TouchableOpacity
         style={[
           styles.row,
           selected && styles.rowSelected,
-          !eligible && styles.rowDisabled,
         ]}
-        onPress={() => {
-          if (!eligible) {
-            Alert.alert(
-              'Card Not in Group',
-              !isSharedAnywhere
-                ? `"${item.name || item.ownerName}" is not shared with any group.`
-                : `"${item.name || item.ownerName}" is not shared with ${targetGroupName}.`,
-            );
-            return;
-          }
-          toggleCard(item.key);
-        }}
-        activeOpacity={eligible ? 0.7 : 0.9}
+        onPress={() => toggleCard(item.key)}
+        activeOpacity={0.7}
       >
         <Icon
-          source={
-            !eligible
-              ? 'minus-circle-outline'
-              : selected
-              ? 'checkbox-marked'
-              : 'checkbox-blank-outline'
-          }
+          source={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
           size={22}
-          color={!eligible ? '#D1D5DB' : selected ? '#111111' : '#9CA3AF'}
+          color={selected ? '#111111' : '#9CA3AF'}
         />
         <View style={[styles.bankIndicator, { backgroundColor: BANK_COLORS[item.bankName] || '#1B1B1B' }]} />
         <View style={{ flex: 1 }}>
           <View style={styles.cardTitleRow}>
             <Text
-              style={[styles.rowTitle, !eligible && styles.rowTitleDisabled]}
+              style={styles.rowTitle}
               numberOfLines={1}
             >
               {item.name || item.ownerName}
             </Text>
-            {!eligible ? (
+            {!isShared && (
               <View style={styles.notInGroupBadge}>
-                <Text style={styles.notInGroupText}>
-                  {!isSharedAnywhere ? 'Not shared' : 'Not in group'}
-                </Text>
+                <Text style={styles.notInGroupText}>Not shared</Text>
               </View>
-            ) : null}
+            )}
           </View>
           <Text style={styles.rowSubtitle} numberOfLines={2}>
             {BANK_DICTIONARY[item.bankName] || item.bankName} · {item.number.slice(-4)}
@@ -267,21 +222,24 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
-  const renderGroup = ({ item }: { item: GroupOption }) => {
-    const selected = selectedGroupId === item.groupId;
+  const renderGroup = ({ item }: { item: Group }) => {
+    const selected = selectedGroupIds.includes(item.groupId);
     return (
       <TouchableOpacity
         style={[styles.row, selected && styles.rowSelected]}
-        onPress={() => setSelectedGroupId(item.groupId)}
+        onPress={() => toggleGroup(item.groupId)}
+        activeOpacity={0.7}
       >
         <Icon
-          source={selected ? 'radiobox-marked' : 'radiobox-blank'}
+          source={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
           size={22}
-          color="#111111"
+          color={selected ? '#111111' : '#9CA3AF'}
         />
         <View style={{ flex: 1 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+          <Text style={styles.rowSubtitle} numberOfLines={1}>
+            {item.memberCount} members · {item.ownerId === uid ? 'Your group' : 'Joined group'}
+          </Text>
         </View>
       </TouchableOpacity>
     );
@@ -296,29 +254,29 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.offlineBannerText}>You are offline. Unsharing cards from groups is disabled.</Text>
           </View>
         )}
-        {lockedGroupId && lockedGroup ? (
+        {lockedGroupId && selectedGroup ? (
           <>
             <View style={styles.destinationBanner}>
               <Icon source="account-group" size={24} color="#111111" />
               <View style={{ flex: 1, marginHorizontal: 8 }}>
                 <Text style={styles.destinationLabel}>Unsharing from group</Text>
                 <Text style={styles.destinationName} numberOfLines={1}>
-                  {lockedGroup.name}
+                  {selectedGroup.name}
                 </Text>
               </View>
               <View style={styles.destinationBadge}>
-                <Text style={styles.destinationBadgeText}>{lockedGroup.memberCount} members</Text>
+                <Text style={styles.destinationBadgeText}>{selectedGroup.memberCount} members</Text>
               </View>
             </View>
 
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                Select cards ({eligibleSelectedCards.length} selected)
+                Select cards ({selectedCardIds.length} selected)
               </Text>
-              {eligibleCards.length > 0 && (
-                <TouchableOpacity onPress={handleToggleSelectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              {ownedCards.length > 0 && (
+                <TouchableOpacity onPress={handleToggleSelectAllCards} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={styles.selectAllText}>
-                    {eligibleSelectedCards.length === eligibleCards.length ? 'Deselect all' : 'Select all'}
+                    {selectedCardIds.length === ownedCards.length ? 'Deselect all' : 'Select all'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -332,8 +290,8 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
               ListEmptyComponent={
                 <View style={styles.emptyCardBox}>
                   <Icon source="credit-card-check-outline" size={36} color="#9CA3AF" />
-                  <Text style={styles.emptyTitle}>No shared cards</Text>
-                  <Text style={styles.emptyText}>None of your cards are currently shared.</Text>
+                  <Text style={styles.emptyTitle}>No cards in your wallet</Text>
+                  <Text style={styles.emptyText}>You do not have any cards to unshare.</Text>
                 </View>
               }
             />
@@ -343,12 +301,12 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.halfSection}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>
-                  Select cards ({eligibleSelectedCards.length} selected)
+                  Select cards ({selectedCardIds.length} selected)
                 </Text>
-                {eligibleCards.length > 0 && (
-                  <TouchableOpacity onPress={handleToggleSelectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                {ownedCards.length > 0 && (
+                  <TouchableOpacity onPress={handleToggleSelectAllCards} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Text style={styles.selectAllText}>
-                      {eligibleSelectedCards.length === eligibleCards.length ? 'Deselect all' : 'Select all'}
+                      {selectedCardIds.length === ownedCards.length ? 'Deselect all' : 'Select all'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -362,21 +320,32 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
                 ListEmptyComponent={
                   <View style={styles.emptyCardBox}>
                     <Icon source="credit-card-check-outline" size={32} color="#9CA3AF" />
-                    <Text style={styles.emptyTitle}>No shared cards</Text>
-                    <Text style={styles.emptyText}>None of your cards are currently shared.</Text>
+                    <Text style={styles.emptyTitle}>No cards in your wallet</Text>
+                    <Text style={styles.emptyText}>You do not have any cards to unshare.</Text>
                   </View>
                 }
               />
             </View>
 
             <View style={styles.halfSection}>
-              <Text style={styles.sectionTitle}>Unshare from group</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>
+                  Select groups ({selectedGroupIds.length} selected)
+                </Text>
+                {availableGroups.length > 0 && !lockedGroupId && (
+                  <TouchableOpacity onPress={handleToggleSelectAllGroups} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.selectAllText}>
+                      {selectedGroupIds.length === availableGroups.length ? 'Deselect all' : 'Select all'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <FlatList
-                data={groupOptions}
+                data={availableGroups}
                 keyExtractor={(item) => item.groupId}
                 renderItem={renderGroup}
                 style={styles.halfList}
-                contentContainerStyle={groupOptions.length === 0 ? styles.emptyContainer : { paddingBottom: 6 }}
+                contentContainerStyle={availableGroups.length === 0 ? styles.emptyContainer : { paddingBottom: 6 }}
                 ListEmptyComponent={<Text style={styles.emptyText}>No groups available.</Text>}
               />
             </View>
@@ -385,37 +354,36 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       <View style={styles.bottomFooter}>
-        <View style={styles.confirmBox}>
-          {eligibleSelectedCards.length > 0 ? (
-            <Text style={styles.confirmText} numberOfLines={2}>
-              Unsharing {eligibleSelectedCards.length} card{eligibleSelectedCards.length === 1 ? '' : 's'} from {targetGroupName}
-              {ineligibleSelectedCount > 0 ? ` (${ineligibleSelectedCount} not in group)` : ''}
+        {selectedGroupIds.length > 0 && selectedCardIds.length > 0 && (
+          <View style={styles.confirmBox}>
+            <Text style={[styles.confirmText, unsharePairs.length === 0 && { color: '#6B7280' }]} numberOfLines={2}>
+              {unsharePairs.length > 0
+                ? `Unsharing ${selectedCardIds.length} card${selectedCardIds.length === 1 ? '' : 's'} across ${selectedGroupIds.length} group${selectedGroupIds.length === 1 ? '' : 's'} (${unsharePairs.length} mapping${unsharePairs.length === 1 ? '' : 's'})`
+                : `None of the selected cards are shared with the selected group${selectedGroupIds.length === 1 ? '' : 's'}`}
             </Text>
-          ) : (
-            <Text style={[styles.confirmText, { color: '#6B7280' }]} numberOfLines={2}>
-              {selectedCardIds.length > 0
-                ? `None of the selected cards are in ${targetGroupName}`
-                : `Select cards to unshare from ${targetGroupName}`}
-            </Text>
-          )}
-        </View>
+          </View>
+        )}
 
         <Button
           mode="contained"
           onPress={handleUnshare}
           loading={saving}
-          disabled={saving || !isConnected || !selectedGroupId || eligibleSelectedCards.length === 0}
+          disabled={saving || !isConnected || selectedGroupIds.length === 0 || selectedCardIds.length === 0 || unsharePairs.length === 0}
           style={[
             styles.unshareButton,
-            (!isConnected || !selectedGroupId || eligibleSelectedCards.length === 0) && { opacity: 0.55 },
+            (!isConnected || selectedGroupIds.length === 0 || selectedCardIds.length === 0 || unsharePairs.length === 0) && { opacity: 0.55 },
           ]}
           labelStyle={{ color: '#FFFFFF', fontWeight: '700' }}
         >
           {!isConnected
             ? 'Offline (Cannot unshare)'
-            : eligibleSelectedCards.length > 0
-            ? `Unshare (${eligibleSelectedCards.length} card${eligibleSelectedCards.length === 1 ? '' : 's'})`
-            : 'Unshare'}
+            : selectedGroupIds.length === 0
+            ? 'Select groups'
+            : selectedCardIds.length === 0
+            ? 'Select cards'
+            : unsharePairs.length === 0
+            ? 'Not in selected groups'
+            : `Unshare (${unsharePairs.length})`}
         </Button>
       </View>
     </SafeAreaView>

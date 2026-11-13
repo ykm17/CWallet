@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Icon, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -8,7 +9,7 @@ import { RootStackParamList } from '../App';
 import { Card, Group } from '../types/Types';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { parseCardDocument } from '../services/cardService';
-import { shareCardsWithGroup, unshareCardFromGroup } from '../services/sharingService';
+import { shareCardsWithGroup, shareCardsWithGroups, unshareCardFromGroup } from '../services/sharingService';
 import { canShareToGroup, contributionLabel } from '../services/sharingUtils';
 import { BANK_COLORS, BANK_DICTIONARY } from '../constants/Constants';
 import { COLLECTIONS as FIRESTORE_COLLECTIONS } from '../constants/Firestore';
@@ -24,7 +25,9 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   const { groups, shareableGroups } = useUserGroups();
   const [ownedCards, setOwnedCards] = useState<Card[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>(lockedGroupId);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(
+    lockedGroupId ? [lockedGroupId] : [],
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,27 +60,42 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
     () => (lockedGroupId ? groups.filter((group) => group.groupId === lockedGroupId) : shareableGroups),
     [groups, lockedGroupId, shareableGroups],
   );
-  const selectedGroup = availableGroups.find((group) => group.groupId === selectedGroupId);
+
+  const selectedGroups = useMemo(
+    () => availableGroups.filter((group) => selectedGroupIds.includes(group.groupId)),
+    [availableGroups, selectedGroupIds],
+  );
+
+  const selectedGroup = selectedGroups[0];
+
+  const shareableAvailableGroupIds = useMemo(
+    () => availableGroups.filter((g) => canShareToGroup(g, uid)).map((g) => g.groupId),
+    [availableGroups, uid],
+  );
 
   const groupNameById = useMemo(
     () => groups.reduce<Record<string, string>>((acc, g) => { acc[g.groupId] = g.name; return acc; }, {}),
     [groups],
   );
 
-  const isCardAlreadySharedWithSelected = (card: Card) => {
-    if (!selectedGroupId) return false;
-    return (card.sharedGroupIds || []).includes(selectedGroupId);
-  };
+  // List of { cardId, groupId } pairs that need to be shared
+  const newSharePairs = useMemo(() => {
+    if (selectedGroupIds.length === 0 || selectedCardIds.length === 0) return [];
+    const pairs: Array<{ cardId: string; groupId: string }> = [];
+    for (const cardId of selectedCardIds) {
+      const card = ownedCards.find((c) => c.key === cardId);
+      const cardSharedGroupIds = card?.sharedGroupIds || [];
+      for (const groupId of selectedGroupIds) {
+        if (!cardSharedGroupIds.includes(groupId)) {
+          pairs.push({ cardId, groupId });
+        }
+      }
+    }
+    return pairs;
+  }, [selectedCardIds, selectedGroupIds, ownedCards]);
 
-  const newCardsToShare = useMemo(() => {
-    if (!selectedGroupId) return [];
-    return selectedCardIds.filter((id) => {
-      const card = ownedCards.find((c) => c.key === id);
-      return card && !isCardAlreadySharedWithSelected(card);
-    });
-  }, [selectedCardIds, ownedCards, selectedGroupId]);
-
-  const alreadySharedSelectedCount = selectedCardIds.length - newCardsToShare.length;
+  const totalPossibleShares = selectedCardIds.length * selectedGroupIds.length;
+  const alreadySharedPairsCount = totalPossibleShares - newSharePairs.length;
 
   const toggleCard = (cardId: string) => {
     setSelectedCardIds((prev) => (
@@ -93,36 +111,51 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const toggleGroup = (groupId: string) => {
+    if (lockedGroupId) return;
+    setSelectedGroupIds((prev) => (
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    ));
+  };
+
+  const handleToggleSelectAllGroups = () => {
+    if (lockedGroupId) return;
+    if (selectedGroupIds.length === shareableAvailableGroupIds.length) {
+      setSelectedGroupIds([]);
+    } else {
+      setSelectedGroupIds(shareableAvailableGroupIds);
+    }
+  };
+
   const handleShare = async () => {
     if (!isConnected) {
       Alert.alert('Offline', 'You must be online to share cards with groups.');
       return;
     }
-    if (!selectedGroupId) {
-      Alert.alert('Select a group', 'Please select a destination group to share with.');
-      return;
-    }
-    const group = availableGroups.find((item) => item.groupId === selectedGroupId);
-    if (group && !canShareToGroup(group, uid)) {
-      Alert.alert('Sharing not allowed', 'This group is owner-controlled.');
+    if (selectedGroupIds.length === 0) {
+      Alert.alert('Select groups', 'Please select at least one destination group to share with.');
       return;
     }
     if (selectedCardIds.length === 0) {
       Alert.alert('Select cards', 'Choose at least one card to share.');
       return;
     }
-    if (newCardsToShare.length === 0) {
+    if (newSharePairs.length === 0) {
       Alert.alert(
         'Already Shared',
-        `All selected cards are already shared with ${selectedGroup?.name || 'this group'}.`,
+        'All selected cards are already shared with the selected groups.',
       );
       return;
     }
 
+    const groupNamesText = selectedGroups.length <= 2
+      ? selectedGroups.map((g) => g.name).join(' & ')
+      : `${selectedGroups.length} groups (${selectedGroups.map((g) => g.name).join(', ')})`;
+
     const confirmMessage =
-      newCardsToShare.length === selectedCardIds.length
-        ? `Share ${newCardsToShare.length} card${newCardsToShare.length === 1 ? '' : 's'} with ${selectedGroup?.name}? Members will be able to view them. Ownership will not change.`
-        : `Share ${newCardsToShare.length} new card${newCardsToShare.length === 1 ? '' : 's'} with ${selectedGroup?.name}? (${alreadySharedSelectedCount} card${alreadySharedSelectedCount === 1 ? ' is' : 's are'} already shared and will be skipped).`;
+      alreadySharedPairsCount === 0
+        ? `Share ${selectedCardIds.length} card${selectedCardIds.length === 1 ? '' : 's'} with ${groupNamesText}? Members will be able to view them. Ownership will not change.`
+        : `Share ${selectedCardIds.length} card${selectedCardIds.length === 1 ? '' : 's'} with ${groupNamesText}? (${alreadySharedPairsCount} already shared mapping${alreadySharedPairsCount === 1 ? ' is' : 's are'} skipped).`;
 
     Alert.alert(
       'Confirm Share',
@@ -134,10 +167,10 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
           onPress: async () => {
             try {
               setSaving(true);
-              const result = await shareCardsWithGroup(newCardsToShare, selectedGroupId);
+              const result = await shareCardsWithGroups(selectedCardIds, selectedGroupIds);
               Alert.alert(
                 'Cards shared',
-                `${result.shared} new card${result.shared === 1 ? '' : 's'} shared with ${selectedGroup?.name}.`,
+                `${result.shared} new card sharing mapping${result.shared === 1 ? '' : 's'} created across ${selectedGroupIds.length} group${selectedGroupIds.length === 1 ? '' : 's'}.`,
                 [{ text: 'OK', onPress: () => navigation.goBack() }],
               );
             } catch (error: any) {
@@ -152,9 +185,9 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const renderCard = ({ item }: { item: Card }) => {
-    const isAlreadyShared = isCardAlreadySharedWithSelected(item);
     const selected = selectedCardIds.includes(item.key);
-    const sharedGroupNames = (item.sharedGroupIds || [])
+    const cardSharedGroupIds = item.sharedGroupIds || [];
+    const sharedGroupNames = cardSharedGroupIds
       .map((gid) => groupNameById[gid])
       .filter(Boolean);
 
@@ -162,69 +195,31 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
       <TouchableOpacity
         style={[
           styles.row,
-          selected && !isAlreadyShared && styles.rowSelected,
-          isAlreadyShared && styles.rowAlreadyShared,
+          selected && styles.rowSelected,
         ]}
         onPress={() => {
-          if (isAlreadyShared) {
-            Alert.alert(
-              'Already in Group',
-              `"${item.name || item.ownerName}" is already shared with ${selectedGroup?.name}. Would you like to unshare it?`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Unshare',
-                  style: 'destructive',
-                  onPress: async () => {
-                    if (!isConnected) {
-                      Alert.alert('Offline', 'You must be online to unshare cards.');
-                      return;
-                    }
-                    try {
-                      await unshareCardFromGroup(item.key, selectedGroupId!);
-                      Alert.alert('Card Unshared', `Removed from ${selectedGroup?.name}.`);
-                    } catch (err: any) {
-                      Alert.alert('Could not unshare card', err.message || 'Please try again.');
-                    }
-                  },
-                },
-              ],
-            );
-            return;
-          }
           toggleCard(item.key);
         }}
-        activeOpacity={isAlreadyShared ? 0.9 : 0.7}
+        activeOpacity={0.7}
       >
         <Icon
-          source={
-            isAlreadyShared
-              ? 'check-circle'
-              : selected
-              ? 'checkbox-marked'
-              : 'checkbox-blank-outline'
-          }
+          source={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
           size={22}
-          color={isAlreadyShared ? '#10B981' : selected ? '#111111' : '#9CA3AF'}
+          color={selected ? '#111111' : '#9CA3AF'}
         />
         <View style={[styles.bankIndicator, { backgroundColor: BANK_COLORS[item.bankName] || '#1B1B1B' }]} />
         <View style={{ flex: 1 }}>
           <View style={styles.cardTitleRow}>
             <Text
-              style={[styles.rowTitle, isAlreadyShared && styles.rowTitleAlreadyShared]}
+              style={styles.rowTitle}
               numberOfLines={1}
             >
               {item.name || item.ownerName}
             </Text>
-            {isAlreadyShared ? (
-              <View style={styles.alreadySharedBadge}>
-                <Text style={styles.alreadySharedText}>Already in group</Text>
-              </View>
-            ) : null}
           </View>
           <Text style={styles.rowSubtitle} numberOfLines={2}>
             {BANK_DICTIONARY[item.bankName] || item.bankName} · {item.number.slice(-4)}
-            {!isAlreadyShared && sharedGroupNames.length > 0
+            {sharedGroupNames.length > 0
               ? ` · Shared with ${sharedGroupNames.join(', ')}`
               : ''}
           </Text>
@@ -234,15 +229,20 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const renderGroup = ({ item }: { item: Group }) => {
-    const selected = selectedGroupId === item.groupId;
+    const selected = selectedGroupIds.includes(item.groupId);
     const allowed = canShareToGroup(item, uid);
     return (
       <TouchableOpacity
         style={[styles.row, selected && styles.rowSelected, !allowed && styles.rowDisabled]}
-        onPress={() => allowed && setSelectedGroupId(item.groupId)}
+        onPress={() => allowed && toggleGroup(item.groupId)}
         disabled={!allowed}
+        activeOpacity={0.7}
       >
-        <Icon source={selected ? 'radiobox-marked' : 'radiobox-blank'} size={22} color={allowed ? '#111111' : '#D1D5DB'} />
+        <Icon
+          source={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+          size={22}
+          color={!allowed ? '#D1D5DB' : selected ? '#111111' : '#9CA3AF'}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.rowSubtitle} numberOfLines={1}>
@@ -334,7 +334,18 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
             </View>
 
             <View style={styles.halfSection}>
-              <Text style={styles.sectionTitle}>Share with one group</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>
+                  Select groups ({selectedGroupIds.length} selected)
+                </Text>
+                {shareableAvailableGroupIds.length > 0 && !lockedGroupId && (
+                  <TouchableOpacity onPress={handleToggleSelectAllGroups} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.selectAllText}>
+                      {selectedGroupIds.length === shareableAvailableGroupIds.length ? 'Deselect all' : 'Select all'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <FlatList
                 data={availableGroups}
                 keyExtractor={(item) => item.groupId}
@@ -349,14 +360,14 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       <View style={styles.bottomFooter}>
-        {selectedGroup && (
+        {selectedGroupIds.length > 0 && (
           <View style={styles.confirmBox}>
-            <Text style={[styles.confirmText, newCardsToShare.length === 0 && { color: '#6B7280' }]} numberOfLines={2}>
-              {newCardsToShare.length > 0
-                ? `Sharing ${newCardsToShare.length} new card${newCardsToShare.length === 1 ? '' : 's'} with ${selectedGroup.name}${alreadySharedSelectedCount > 0 ? ` (${alreadySharedSelectedCount} already in group)` : ''}`
+            <Text style={[styles.confirmText, newSharePairs.length === 0 && { color: '#6B7280' }]} numberOfLines={2}>
+              {newSharePairs.length > 0
+                ? `Sharing ${selectedCardIds.length} card${selectedCardIds.length === 1 ? '' : 's'} across ${selectedGroupIds.length} group${selectedGroupIds.length === 1 ? '' : 's'} (${newSharePairs.length} new mapping${newSharePairs.length === 1 ? '' : 's'}${alreadySharedPairsCount > 0 ? `, ${alreadySharedPairsCount} skipped` : ''})`
                 : selectedCardIds.length > 0
-                ? `All selected cards are already in ${selectedGroup.name}`
-                : `Select cards to share with ${selectedGroup.name}`}
+                ? `All selected cards are already in the selected group${selectedGroupIds.length === 1 ? '' : 's'}`
+                : `Select cards to share with ${selectedGroupIds.length} group${selectedGroupIds.length === 1 ? '' : 's'}`}
             </Text>
           </View>
         )}
@@ -365,20 +376,22 @@ const ShareToGroup: React.FC<Props> = ({ navigation, route }) => {
           mode="contained"
           onPress={handleShare}
           loading={saving}
-          disabled={saving || !isConnected || !selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)}
+          disabled={saving || !isConnected || selectedGroupIds.length === 0 || selectedCardIds.length === 0 || newSharePairs.length === 0}
           style={[
             styles.shareButton,
-            (!isConnected || !selectedGroupId || (selectedCardIds.length > 0 && newCardsToShare.length === 0)) && { opacity: 0.55 },
+            (!isConnected || selectedGroupIds.length === 0 || selectedCardIds.length === 0 || newSharePairs.length === 0) && { opacity: 0.55 },
           ]}
           labelStyle={{ color: '#FFFFFF', fontWeight: '700' }}
         >
           {!isConnected
             ? 'Offline (Cannot share)'
-            : selectedGroup && selectedCardIds.length > 0 && newCardsToShare.length === 0
-            ? 'Already in this group'
-            : newCardsToShare.length > 0
-            ? `Share (${newCardsToShare.length} new)`
-            : 'Share'}
+            : selectedGroupIds.length === 0
+            ? 'Select groups'
+            : selectedCardIds.length === 0
+            ? 'Select cards'
+            : newSharePairs.length === 0
+            ? 'Already in selected groups'
+            : `Share (${newSharePairs.length} new)`}
         </Button>
       </View>
     </SafeAreaView>
