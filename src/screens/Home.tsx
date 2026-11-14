@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl, Image, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert } from '../components/CustomAlert';
@@ -48,6 +48,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const { groups, loading: groupsLoading } = useUserGroups();
   const { cards: sharedCards, loading: sharedCardsLoading } = useAccessibleCards(groups, isConnected);
 
+  const currentUser = auth().currentUser;
+  const displayName = currentUser?.displayName || 'CWallet User';
+  const email = currentUser?.email || '';
+  const photoUrl = currentUser?.photoURL;
+  const initial = (displayName.charAt(0) || email.charAt(0) || 'U').toUpperCase();
+
   const getCardEffectiveType = (card: Card): string => {
     if (card.cardType) return card.cardType.toUpperCase();
     const detected = detectCardType(card.name);
@@ -78,6 +84,14 @@ const Home: React.FC<Props> = ({ navigation }) => {
     const list = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;
     return sortCardsByLatest(list);
   }, [isCardPersonal, personalCardsWithGroups, sharedCards]);
+
+  const creditCardsCount = useMemo(() => {
+    return sourceCards.filter((card) => getCardEffectiveType(card) === 'CREDIT').length;
+  }, [sourceCards]);
+
+  const debitCardsCount = useMemo(() => {
+    return sourceCards.filter((card) => getCardEffectiveType(card) === 'DEBIT').length;
+  }, [sourceCards]);
 
   const filteredCards = sourceCards.filter((card: Card) => {
     const query = searchQuery.toLowerCase();
@@ -519,7 +533,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
         {/* Top Header Bar */}
         <View style={styles.topBar}>
           {selectionMode ? (
-            <>
+            <View style={styles.selectionTopBar}>
               <TouchableOpacity
                 style={styles.topBarCancelBtn}
                 onPress={() => {
@@ -531,9 +545,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 <Icon source="close" size={16} color="#374151" />
                 <Text style={styles.topBarCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.topBarSelectionTitle}>
-                {selectedCardIds.length} selected
-              </Text>
+              <View style={styles.selectionTitleContainer}>
+                <Text style={styles.topBarSelectionTitle}>
+                  {selectedCardIds.length} selected
+                </Text>
+              </View>
               <TouchableOpacity
                 style={styles.topBarSelectAllBtn}
                 onPress={() => {
@@ -549,7 +565,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   {selectedCardIds.length === cardData.length ? 'Clear' : 'Select all'}
                 </Text>
               </TouchableOpacity>
-            </>
+            </View>
           ) : (
             <>
               <TouchableOpacity
@@ -558,22 +574,37 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.7}
                 accessibilityLabel="Open profile"
               >
-                <View style={styles.topBarBrandBox}>
-                  <Icon source="wallet" size={17} color="#FFFFFF" />
+                <View style={styles.avatarWrap}>
+                  {photoUrl ? (
+                    <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarInitial}>{initial}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.avatarStatusDot, isConnected ? styles.dotOnline : styles.dotOffline]} />
                 </View>
-                <Text style={styles.topBarBrandTitle}>{APP_NAME}</Text>
-                <View style={[styles.topBarStatusPill, isConnected ? styles.topBarStatusOnline : styles.topBarStatusOffline]}>
-                  <View style={[styles.topBarStatusDot, isConnected ? styles.topBarStatusDotOnline : styles.topBarStatusDotOffline]} />
-                  <Text style={[styles.topBarStatusText, isConnected ? styles.topBarStatusTextOnline : styles.topBarStatusTextOffline]}>
-                    {isConnected ? 'Online' : 'Offline'}
+                <View style={styles.userInfoWrap}>
+                  <Text style={styles.appTitleText}>{APP_NAME}</Text>
+                  <Text style={styles.userNameText} numberOfLines={1}>
+                    {displayName}
                   </Text>
                 </View>
               </TouchableOpacity>
+
               <View style={styles.topBarRight}>
+                <View style={[styles.statusBadge, isConnected ? styles.statusBadgeOnline : styles.statusBadgeOffline]}>
+                  <View style={[styles.statusDot, isConnected ? styles.statusDotOnline : styles.statusDotOffline]} />
+                  <Text style={[styles.statusBadgeText, isConnected ? styles.statusTextOnline : styles.statusTextOffline]}>
+                    {isConnected ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+
                 <TouchableOpacity
                   style={styles.topBarGroupsBtn}
                   onPress={() => navigation.navigate('Groups')}
                   activeOpacity={0.7}
+                  accessibilityLabel="Open groups"
                 >
                   <Icon source="account-group" size={16} color="#111111" />
                   <Text style={styles.topBarGroupsText}>Groups</Text>
@@ -588,16 +619,27 @@ const Home: React.FC<Props> = ({ navigation }) => {
           )}
         </View>
 
-        <Searchbar
-          placeholder="Search"
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchBar}
-          inputStyle={styles.searchInput}
-          iconColor="white"
-          placeholderTextColor="white"
-          selectionColor="white"
-        />
+        {/* Clean Modern Search Container */}
+        <View style={styles.searchContainer}>
+          <Icon source="magnify" size={18} color="#9CA3AF" />
+          <TextInput
+            placeholder="Search by bank, card name, number..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.trim().length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon source="close-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Credit / Debit Filter Chips */}
         <View style={styles.filterChipContainer}>
@@ -651,7 +693,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 selectedTypeFilter === 'ALL' && styles.filterChipTextActive,
               ]}
             >
-              All
+              All ({sourceCards.length})
             </Text>
           </TouchableOpacity>
 
@@ -674,7 +716,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 selectedTypeFilter === 'CREDIT' && styles.filterChipTextActive,
               ]}
             >
-              Credit
+              Credit ({creditCardsCount})
             </Text>
           </TouchableOpacity>
 
@@ -697,7 +739,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 selectedTypeFilter === 'DEBIT' && styles.filterChipTextActive,
               ]}
             >
-              Debit
+              Debit ({debitCardsCount})
             </Text>
           </TouchableOpacity>
         </View>
@@ -719,7 +761,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
           )}
           keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -731,7 +773,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               {isCurrentTabLoading && sourceCards.length === 0 ? (
-                <View style={styles.emptyInner}>
+                <View style={styles.emptyCard}>
                   <ActivityIndicator size="small" color="#111111" style={{ marginBottom: 12 }} />
                   <Text style={styles.emptyTitle}>
                     {isCardPersonal === 'PRL' ? 'Loading cards...' : 'Loading shared cards...'}
@@ -741,12 +783,14 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   </Text>
                 </View>
               ) : sourceCards.length === 0 ? (
-                <View style={styles.emptyInner}>
-                  <Icon
-                    source={isCardPersonal === 'PRL' ? 'credit-card-plus-outline' : 'account-group-outline'}
-                    size={46}
-                    color="#9CA3AF"
-                  />
+                <View style={styles.emptyCard}>
+                  <View style={styles.emptyIconBox}>
+                    <Icon
+                      source={isCardPersonal === 'PRL' ? 'credit-card-plus-outline' : 'account-group-outline'}
+                      size={28}
+                      color="#111111"
+                    />
+                  </View>
                   <Text style={styles.emptyTitle}>
                     {isCardPersonal === 'PRL' ? 'No cards yet' : 'No shared cards yet'}
                   </Text>
@@ -777,12 +821,14 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   )}
                 </View>
               ) : (
-                <View style={styles.emptyInner}>
-                  <Icon
-                    source={searchQuery.trim().length > 0 ? 'magnify' : 'credit-card-off-outline'}
-                    size={46}
-                    color="#9CA3AF"
-                  />
+                <View style={styles.emptyCard}>
+                  <View style={styles.emptyIconBox}>
+                    <Icon
+                      source={searchQuery.trim().length > 0 ? 'magnify' : 'credit-card-off-outline'}
+                      size={28}
+                      color="#111111"
+                    />
+                  </View>
                   <Text style={styles.emptyTitle}>
                     {searchQuery.trim().length > 0 ? 'No matching cards' : 'No cards found'}
                   </Text>
@@ -813,8 +859,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         {selectionMode && isCardPersonal === 'PRL' && (
           <View style={styles.selectionBar}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={styles.selectionCount}>{selectedCardIds.length} selected</Text>
+            <View style={styles.selectionBarLeft}>
+              <View style={styles.selectionCountBadge}>
+                <Text style={styles.selectionCount}>{selectedCardIds.length}</Text>
+              </View>
+              <Text style={styles.selectionLabel}>selected</Text>
               {cardData.length > 0 && (
                 <TouchableOpacity
                   onPress={() => {
@@ -832,11 +881,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={styles.selectionBarRight}>
               <TouchableOpacity
                 style={[styles.unshareSelectedButton, (selectedCardIds.length === 0 || !isConnected) && { opacity: 0.5 }]}
                 disabled={selectedCardIds.length === 0 || !isConnected}
                 onPress={handleUnshareSelected}
+                activeOpacity={0.7}
               >
                 <Icon source="share-off" size={15} color="#FFFFFF" />
                 <Text style={styles.unshareSelectedText}>Unshare</Text>
@@ -845,6 +895,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 style={[styles.shareSelectedButton, (selectedCardIds.length === 0 || !isConnected) && { opacity: 0.5 }]}
                 disabled={selectedCardIds.length === 0 || !isConnected}
                 onPress={handleShareSelected}
+                activeOpacity={0.7}
               >
                 <Icon source="share-variant" size={15} color="#111111" />
                 <Text style={styles.shareSelectedText}>Share</Text>
@@ -853,44 +904,56 @@ const Home: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        <View style={styles.bottomTabRow}>
-          <TouchableOpacity
-            style={[styles.bottomTab, isCardPersonal === 'PRL' && styles.bottomTabActive]}
-            onPress={() => {
-              setIsCardPersonal('PRL');
-              setSelectionMode(false);
-              setSelectedCardIds([]);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.bottomTabText, isCardPersonal === 'PRL' && styles.bottomTabTextActive]}>
-              My Cards
-            </Text>
-            <View style={[styles.bottomTabBadge, isCardPersonal === 'PRL' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
-              <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'PRL' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
-                {cardData.length}
+        <View style={styles.bottomTabContainer}>
+          <View style={styles.bottomTabCard}>
+            <TouchableOpacity
+              style={[styles.bottomTab, isCardPersonal === 'PRL' && styles.bottomTabActive]}
+              onPress={() => {
+                setIsCardPersonal('PRL');
+                setSelectionMode(false);
+                setSelectedCardIds([]);
+              }}
+              activeOpacity={0.8}
+            >
+              <Icon
+                source="credit-card"
+                size={16}
+                color={isCardPersonal === 'PRL' ? '#FFFFFF' : '#6B7280'}
+              />
+              <Text style={[styles.bottomTabText, isCardPersonal === 'PRL' && styles.bottomTabTextActive]}>
+                My Cards
               </Text>
-            </View>
-          </TouchableOpacity>
+              <View style={[styles.bottomTabBadge, isCardPersonal === 'PRL' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
+                <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'PRL' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
+                  {cardData.length}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.bottomTab, isCardPersonal === 'GRP' && styles.bottomTabActive]}
-            onPress={() => {
-              setIsCardPersonal('GRP');
-              setSelectionMode(false);
-              setSelectedCardIds([]);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.bottomTabText, isCardPersonal === 'GRP' && styles.bottomTabTextActive]}>
-              Shared Cards
-            </Text>
-            <View style={[styles.bottomTabBadge, isCardPersonal === 'GRP' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
-              <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'GRP' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
-                {sharedCards.length}
+            <TouchableOpacity
+              style={[styles.bottomTab, isCardPersonal === 'GRP' && styles.bottomTabActive]}
+              onPress={() => {
+                setIsCardPersonal('GRP');
+                setSelectionMode(false);
+                setSelectedCardIds([]);
+              }}
+              activeOpacity={0.8}
+            >
+              <Icon
+                source="account-group"
+                size={16}
+                color={isCardPersonal === 'GRP' ? '#FFFFFF' : '#6B7280'}
+              />
+              <Text style={[styles.bottomTabText, isCardPersonal === 'GRP' && styles.bottomTabTextActive]}>
+                Shared Cards
               </Text>
-            </View>
-          </TouchableOpacity>
+              <View style={[styles.bottomTabBadge, isCardPersonal === 'GRP' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
+                <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'GRP' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
+                  {sharedCards.length}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <FAB
@@ -922,54 +985,251 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  fab: {
-    backgroundColor: '#1B1B1B',
-    color: 'white',
-    margin: 10,
-    borderRadius: 10,
-    bottom: 80,
-    right: 10,
-    position: 'absolute',
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
   },
-  searchBar: {
-    marginHorizontal: 12,
-    marginTop: 6,
-    marginBottom: 8,
-    elevation: 2,
-    backgroundColor: '#000000',
-    borderRadius: 8,
-    height: 40,
+  avatarWrap: {
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    borderColor: '#E4E4E7',
+  },
+  avatarPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#111111',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  searchInput: {
-    color: 'white',
-    fontSize: 14,
-    minHeight: 0,
-    paddingVertical: 0,
-    alignSelf: 'center',
+  avatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
+  avatarStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  dotOnline: {
+    backgroundColor: '#10B981',
+  },
+  dotOffline: {
+    backgroundColor: '#EF4444',
+  },
+  userInfoWrap: {
+    flex: 1,
+  },
+  appTitleText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#71717A',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  userNameText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111111',
+    letterSpacing: -0.3,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusBadgeOnline: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  statusBadgeOffline: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotOnline: {
+    backgroundColor: '#10B981',
+  },
+  statusDotOffline: {
+    backgroundColor: '#EF4444',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusTextOnline: {
+    color: '#047857',
+  },
+  statusTextOffline: {
+    color: '#B91C1C',
+  },
+  topBarGroupsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  topBarGroupsText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  topBarGroupsBadge: {
+    backgroundColor: '#111111',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarGroupsBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  // Selection Top Bar
+  selectionTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+  },
+  selectionTitleContainer: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  topBarCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  topBarCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  topBarSelectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  topBarSelectAllBtn: {
+    backgroundColor: '#111111',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarSelectAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Search
+  searchContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
+    borderRadius: 12,
+    height: 42,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#111111',
+    marginLeft: 8,
+    paddingVertical: 0,
+  },
+  // Filter Chips
   filterChipContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    marginBottom: 6,
+    marginHorizontal: 16,
+    marginBottom: 8,
     gap: 8,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 4,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   filterChipActive: {
-    backgroundColor: '#000000',
+    backgroundColor: '#111111',
+    borderColor: '#111111',
   },
   filterChipText: {
     fontSize: 12,
@@ -979,20 +1239,54 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: '#FFFFFF',
   },
+  // Selection Bar
   selectionBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 12,
-    marginBottom: 4,
+    marginHorizontal: 16,
+    marginBottom: 6,
     backgroundColor: '#111111',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  selectionBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectionCountBadge: {
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   selectionCount: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  selectionLabel: {
+    color: '#D1D5DB',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  selectAllHeaderBtn: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    marginLeft: 4,
+  },
+  selectionBarRight: {
+    flexDirection: 'row',
+    gap: 8,
   },
   shareSelectedButton: {
     backgroundColor: '#FFFFFF',
@@ -1006,7 +1300,7 @@ const styles = StyleSheet.create({
   shareSelectedText: {
     color: '#111111',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
   },
   unshareSelectedButton: {
     backgroundColor: '#374151',
@@ -1020,21 +1314,27 @@ const styles = StyleSheet.create({
   unshareSelectedText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 13,
-  },
-  selectAllHeaderBtn: {
-    color: '#9CA3AF',
     fontSize: 12,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
   },
-  bottomTabRow: {
+  // Bottom Tabs
+  bottomTabContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 8,
+    backgroundColor: '#F4F5F7',
+  },
+  bottomTabCard: {
     flexDirection: 'row',
-    marginHorizontal: 12,
-    marginVertical: 10,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
     padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   bottomTab: {
     flex: 1,
@@ -1043,11 +1343,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 9,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     gap: 6,
   },
   bottomTabActive: {
-    backgroundColor: '#000000',
+    backgroundColor: '#111111',
   },
   bottomTabText: {
     fontWeight: '700',
@@ -1069,7 +1369,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   bottomTabBadgeInactive: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: '#F3F4F6',
   },
   bottomTabBadgeText: {
     fontSize: 11,
@@ -1079,17 +1379,103 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   bottomTabBadgeTextInactive: {
-    color: '#374151',
+    color: '#4B5563',
   },
+  // FAB
+  fab: {
+    backgroundColor: '#111111',
+    borderRadius: 16,
+    bottom: 78,
+    right: 16,
+    position: 'absolute',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  // Empty State
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
+    padding: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  emptyIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#F4F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111111',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 6,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#111111',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 18,
+  },
+  emptyActionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  emptyClearButton: {
+    backgroundColor: '#F4F5F7',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 14,
+  },
+  emptyClearButtonText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  // Confirm Dialog
   confirmDialog: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    marginHorizontal: 24,
+    borderRadius: 16,
+    marginHorizontal: 28,
   },
   confirmDialogContent: {
-    padding: 0,
+    padding: 20,
   },
   confirmHeader: {
     flexDirection: 'row',
@@ -1098,9 +1484,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   confirmIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1111,23 +1497,20 @@ const styles = StyleSheet.create({
   },
   confirmDialogMessage: {
     fontSize: 14,
-    color: '#4B5563',
+    color: '#6B7280',
     lineHeight: 20,
     marginBottom: 20,
   },
   confirmDialogActions: {
     flexDirection: 'row',
-    gap: 10,
     justifyContent: 'flex-end',
+    gap: 10,
   },
   confirmCancelBtn: {
-    flex: 1,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingHorizontal: 14,
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   confirmCancelText: {
     fontSize: 14,
@@ -1135,205 +1518,15 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   confirmActionBtn: {
-    flex: 1,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingHorizontal: 14,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmActionText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  emptyContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingVertical: 40,
-  },
-  emptyInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    maxWidth: 320,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111111',
-    marginTop: 14,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  emptyActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#111111',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 18,
-  },
-  emptyActionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  emptyClearButton: {
-    backgroundColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 14,
-  },
-  emptyClearButtonText: {
-    color: '#374151',
     fontWeight: '600',
-    fontSize: 13,
-  },
-  topBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarBrandBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#111111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarBrandTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111111',
-    letterSpacing: -0.4,
-  },
-  topBarStatusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  topBarStatusOnline: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
-  },
-  topBarStatusOffline: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
-  },
-  topBarStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  topBarStatusDotOnline: {
-    backgroundColor: '#10B981',
-  },
-  topBarStatusDotOffline: {
-    backgroundColor: '#EF4444',
-  },
-  topBarStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  topBarStatusTextOnline: {
-    color: '#047857',
-  },
-  topBarStatusTextOffline: {
-    color: '#B91C1C',
-  },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarGroupsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  topBarGroupsText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  topBarGroupsBadge: {
-    backgroundColor: '#111111',
-    borderRadius: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    minWidth: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarGroupsBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  topBarLogoutBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarCancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  topBarCancelText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  topBarSelectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  topBarSelectAllBtn: {
-    backgroundColor: '#111111',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarSelectAllText: {
-    fontSize: 12,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
 });
