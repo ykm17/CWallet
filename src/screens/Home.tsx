@@ -21,6 +21,7 @@ import { detectCardType } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { parseCardDocument } from '../services/cardService';
 import { sortCardsByLatest } from '../services/sharingUtils';
+import { activatePendingCardAccessForUser } from '../services/sharingService';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { useAccessibleCards } from '../hooks/useAccessibleCards';
 import { upsertCurrentUserProfile } from '../services/userService';
@@ -124,7 +125,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     upsertCurrentUserProfile()
-      .then(() => activatePendingMembershipsForUser())
+      .then(() => Promise.allSettled([activatePendingMembershipsForUser(), activatePendingCardAccessForUser()]))
       .catch((error: any) => {
         console.error('Failed to refresh user profile / activate memberships', error);
       });
@@ -335,7 +336,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
     try {
       if (isConnected) {
         await Promise.allSettled([
-          upsertCurrentUserProfile().then(() => activatePendingMembershipsForUser()),
+          upsertCurrentUserProfile().then(() => Promise.allSettled([activatePendingMembershipsForUser(), activatePendingCardAccessForUser()])),
           (async () => {
             const uid = auth().currentUser?.uid;
             if (uid) {

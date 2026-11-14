@@ -1,3 +1,11 @@
+export interface SharedPerson {
+    recipientUid?: string | null;
+    email?: string;
+    appleUserId?: string | null;
+    displayName?: string;
+    status?: 'active' | 'pending';
+}
+
 export interface Card {
     ownerName: string,
     bankName: string,
@@ -14,7 +22,16 @@ export interface Card {
     cardType?: string,
     ownerId?: string,
     sharedGroupIds?: string[],
+    sharedUserIds?: string[],
+    sharedEmails?: string[],
+    sharedAppleIds?: string[],
+    sharedWithUsers?: SharedPerson[],
     accessGroupNames?: string[],
+    accessUserNames?: string[],
+    sharedByInfo?: {
+        name?: string;
+        email?: string;
+    },
     addedAt?: any,
     createdAt?: any,
     sharedAt?: any,
@@ -61,6 +78,20 @@ export interface CardGroupAccess {
     groupId: string,
     sharedBy: string,
     sharedAt?: any,
+}
+
+export interface CardUserAccess {
+    accessId: string,
+    cardId: string,
+    recipientUid?: string | null,
+    recipientEmail?: string,
+    recipientAppleId?: string | null,
+    recipientDisplayName?: string,
+    sharedBy: string,
+    sharedByEmail?: string,
+    sharedByName?: string,
+    sharedAt?: any,
+    status: 'active' | 'pending',
 }
 
 // Define the dictionary type

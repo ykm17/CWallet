@@ -15,11 +15,15 @@ import {
 } from '@react-native-firebase/firestore';
 import { getFirestore } from '@react-native-firebase/firestore';
 import { COLLECTIONS, MAX_SHARED_GROUPS_PER_CARD } from '../constants/Firestore';
-import { Card, CardGroupAccess, Group } from '../types/Types';
+import { Card, CardGroupAccess, CardUserAccess, Group, SharedPerson } from '../types/Types';
 import { fetchCardsByIds } from './cardService';
 import { fetchGroup } from './groupService';
+import { findRegisteredUser, getAppleUserId } from './userService';
 import {
   accessDocId,
+  userAccessDocId,
+  validateRecipientIdentifier,
+  isSelfRecipient,
   assertShareGroupLimit,
   canShareToGroup,
   chunkArray,
@@ -44,6 +48,20 @@ const mapAccess = (id: string, data: any): CardGroupAccess => ({
   groupId: data.groupId,
   sharedBy: data.sharedBy,
   sharedAt: data.sharedAt,
+});
+
+const mapUserAccess = (id: string, data: any): CardUserAccess => ({
+  accessId: id,
+  cardId: data.cardId,
+  recipientUid: data.recipientUid || null,
+  recipientEmail: data.recipientEmail || '',
+  recipientAppleId: data.recipientAppleId || null,
+  recipientDisplayName: data.recipientDisplayName || '',
+  sharedBy: data.sharedBy,
+  sharedByEmail: data.sharedByEmail || '',
+  sharedByName: data.sharedByName || '',
+  sharedAt: data.sharedAt,
+  status: data.status || 'active',
 });
 
 const assertOwnsCard = async (cardId: string, uid: string) => {
@@ -366,4 +384,376 @@ export const fetchAccessibleCards = async (
       .map((groupId) => groupNameById[groupId])
       .filter(Boolean),
   }));
+};
+
+/**
+ * Shares one or more cards directly with an individual person by Email ID or Apple User ID.
+ */
+export const shareCardsWithPerson = async (
+  cardIds: string[],
+  recipientIdentifier: string,
+): Promise<{ shared: number; skipped: number; isPending: boolean; recipientName: string }> => {
+  const uid = requireUid();
+  const currentUser = auth().currentUser;
+  const currentEmail = currentUser?.email?.toLowerCase().trim() || '';
+  const currentAppleId = getAppleUserId(currentUser);
+
+  const validation = validateRecipientIdentifier(recipientIdentifier);
+  if (!validation.isValid) {
+    throw new Error('Please enter a valid email address or Apple user ID.');
+  }
+
+  // Prevent sharing with oneself
+  if (
+    isSelfRecipient(validation.normalized, { uid, email: currentEmail, appleUserId: currentAppleId }) ||
+    isSelfRecipient(recipientIdentifier, { uid, email: currentEmail, appleUserId: currentAppleId })
+  ) {
+    throw new Error('You cannot share cards with yourself.');
+  }
+
+  const registered = await findRegisteredUser(validation.normalized);
+
+  // Prevent sharing with oneself if registered profile points to current user
+  if (registered && registered.uid === uid) {
+    throw new Error('You cannot share cards with yourself.');
+  }
+
+  const uniqueCardIds = uniqueIds(cardIds);
+  if (uniqueCardIds.length === 0) {
+    throw new Error('Select at least one card.');
+  }
+
+  const recipientUid = registered?.uid || null;
+  const recipientEmail = validation.isEmail ? validation.normalized : (registered?.email || '');
+  const recipientAppleId = !validation.isEmail ? validation.normalized : (registered?.appleUserId || null);
+  const recipientDisplayName = registered?.displayName || recipientEmail || recipientAppleId || 'User';
+  const isPending = !recipientUid;
+  const status: 'active' | 'pending' = isPending ? 'pending' : 'active';
+  const recipientKey = recipientUid || `pending_${recipientEmail || recipientAppleId}`;
+
+  const operations: string[] = [];
+  let skipped = 0;
+
+  for (const cardId of uniqueCardIds) {
+    const cardSnap = await assertOwnsCard(cardId, uid);
+    const data = cardSnap.data() || {};
+    const existingUserIds: string[] = data.sharedUserIds || [];
+    const existingEmails: string[] = data.sharedEmails || [];
+    const existingAppleIds: string[] = data.sharedAppleIds || [];
+
+    const alreadyShared =
+      (recipientUid && existingUserIds.includes(recipientUid)) ||
+      (recipientEmail && existingEmails.includes(recipientEmail)) ||
+      (recipientAppleId && existingAppleIds.includes(recipientAppleId));
+
+    if (alreadyShared) {
+      skipped += 1;
+    } else {
+      operations.push(cardId);
+    }
+  }
+
+  if (operations.length > 0) {
+    const personObj: SharedPerson = {
+      recipientUid: recipientUid || null,
+      email: recipientEmail || '',
+      appleUserId: recipientAppleId || null,
+      displayName: recipientDisplayName,
+    };
+
+    for (const chunk of chunkArray(operations, 200)) {
+      const batch = writeBatch(db());
+      chunk.forEach((cardId) => {
+        const accessId = userAccessDocId(cardId, recipientKey);
+        batch.set(doc(db(), COLLECTIONS.CARD_USER_ACCESS, accessId), {
+          cardId,
+          recipientUid,
+          recipientEmail,
+          recipientAppleId,
+          recipientDisplayName,
+          sharedBy: uid,
+          sharedByEmail: currentUser?.email || '',
+          sharedByName: currentUser?.displayName || currentUser?.email || '',
+          sharedAt: serverTimestamp(),
+          status,
+        });
+
+        const cardUpdates: Record<string, any> = {
+          sharedWithUsers: arrayUnion(personObj),
+        };
+        if (recipientUid) {
+          cardUpdates.sharedUserIds = arrayUnion(recipientUid);
+        }
+        if (recipientEmail) {
+          cardUpdates.sharedEmails = arrayUnion(recipientEmail);
+        }
+        if (recipientAppleId) {
+          cardUpdates.sharedAppleIds = arrayUnion(recipientAppleId);
+        }
+
+        batch.update(doc(db(), COLLECTIONS.CARDS, cardId), cardUpdates);
+      });
+      await batch.commit();
+    }
+  }
+
+  return {
+    shared: operations.length,
+    skipped,
+    isPending,
+    recipientName: recipientDisplayName,
+  };
+};
+
+/**
+ * Unshares one or more cards from an individual person.
+ */
+export const unshareCardsFromPerson = async (
+  cardIds: string[],
+  recipientKeyOrIdentifier: string,
+): Promise<number> => {
+  const uid = requireUid();
+  const uniqueCardIds = uniqueIds(cardIds);
+  if (uniqueCardIds.length === 0) return 0;
+
+  const trimmed = recipientKeyOrIdentifier.trim();
+  const normalizedKey = trimmed.toLowerCase();
+
+  let unsharedCount = 0;
+
+  for (const cardId of uniqueCardIds) {
+    await assertOwnsCard(cardId, uid);
+
+    // Query cardUserAccess docs for this card and this recipient
+    const q1 = query(
+      collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+      where('cardId', '==', cardId),
+      where('sharedBy', '==', uid),
+    );
+    const snap = await getDocs(q1);
+
+    const matches = snap.docs.filter((docSnap: any) => {
+      const data = docSnap.data();
+      return (
+        docSnap.id === userAccessDocId(cardId, trimmed) ||
+        docSnap.id === userAccessDocId(cardId, `pending_${trimmed}`) ||
+        data.recipientUid === trimmed ||
+        data.recipientEmail?.toLowerCase() === normalizedKey ||
+        data.recipientAppleId === trimmed
+      );
+    });
+
+    if (matches.length > 0) {
+      const batch = writeBatch(db());
+      const cardRef = doc(db(), COLLECTIONS.CARDS, cardId);
+      const cardSnap = await getDoc(cardRef);
+      const cardData = cardSnap.data() || {};
+
+      matches.forEach((d: any) => {
+        batch.delete(d.ref);
+      });
+
+      // Filter out the recipient from sharedWithUsers
+      const currentUsers: SharedPerson[] = cardData.sharedWithUsers || [];
+      const filteredUsers = currentUsers.filter((u) => {
+        return (
+          u.recipientUid !== trimmed &&
+          u.email?.toLowerCase() !== normalizedKey &&
+          u.appleUserId !== trimmed
+        );
+      });
+
+      const updates: Record<string, any> = {
+        sharedWithUsers: filteredUsers,
+      };
+      if (cardData.sharedUserIds) {
+        updates.sharedUserIds = arrayRemove(trimmed);
+      }
+      if (cardData.sharedEmails) {
+        updates.sharedEmails = arrayRemove(normalizedKey);
+      }
+      if (cardData.sharedAppleIds) {
+        updates.sharedAppleIds = arrayRemove(trimmed);
+      }
+
+      batch.update(cardRef, updates);
+      await batch.commit();
+      unsharedCount++;
+    }
+  }
+
+  return unsharedCount;
+};
+
+/**
+ * Unshares one or more cards from multiple individual people.
+ */
+export const unshareCardsFromPeople = async (
+  cardIds: string[],
+  recipientKeys: string[],
+): Promise<number> => {
+  let count = 0;
+  for (const recipientKey of recipientKeys) {
+    count += await unshareCardsFromPerson(cardIds, recipientKey);
+  }
+  return count;
+};
+
+/**
+ * Listens for cards directly shared with the current user.
+ */
+export const listenAccessForUser = (
+  uid: string,
+  email: string,
+  appleUserId: string | null,
+  onChange: (access: CardUserAccess[]) => void,
+  onError?: (error: Error) => void,
+): (() => void) => {
+  if (!uid) return () => {};
+
+  const normEmail = email ? email.toLowerCase().trim() : '';
+
+  // Listen by recipientUid
+  const qUid = query(
+    collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+    where('recipientUid', '==', uid),
+  );
+
+  let uidRecords: CardUserAccess[] = [];
+  let emailRecords: CardUserAccess[] = [];
+
+  const emit = () => {
+    const map = new Map<string, CardUserAccess>();
+    [...uidRecords, ...emailRecords].forEach((r) => map.set(r.accessId, r));
+    onChange(Array.from(map.values()));
+  };
+
+  const unsubUid = onSnapshot(
+    qUid,
+    (snap) => {
+      uidRecords = snap.docs.map((d: any) => mapUserAccess(d.id, d.data()));
+      emit();
+    },
+    (err) => onError?.(err as Error),
+  );
+
+  let unsubEmail = () => {};
+  if (normEmail) {
+    const qEmail = query(
+      collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+      where('recipientEmail', '==', normEmail),
+    );
+    unsubEmail = onSnapshot(
+      qEmail,
+      (snap) => {
+        emailRecords = snap.docs.map((d: any) => mapUserAccess(d.id, d.data()));
+        emit();
+      },
+      (err) => onError?.(err as Error),
+    );
+  }
+
+  return () => {
+    unsubUid();
+    unsubEmail();
+  };
+};
+
+/**
+ * Listens for all cardUserAccess records created by the current user for their owned cards.
+ * Enables seeing which individual people cards are currently shared with.
+ */
+export const listenPersonAccessForCards = (
+  cardIds: string[],
+  onChange: (records: CardUserAccess[]) => void,
+  onError?: (error: Error) => void,
+): (() => void) => {
+  const uid = auth().currentUser?.uid;
+  if (!uid || cardIds.length === 0) {
+    onChange([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+    where('sharedBy', '==', uid),
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const records = snap.docs
+        .map((d: any) => mapUserAccess(d.id, d.data()))
+        .filter((r: CardUserAccess) => cardIds.includes(r.cardId));
+      onChange(records);
+    },
+    (err) => onError?.(err as Error),
+  );
+};
+
+/**
+ * Activates any pending 1-to-1 card shares when a user registers or logs in.
+ */
+export const activatePendingCardAccessForUser = async (): Promise<number> => {
+  const currentUser = auth().currentUser;
+  if (!currentUser?.uid) return 0;
+
+  const email = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+  const appleId = getAppleUserId(currentUser);
+
+  let updatedCount = 0;
+
+  if (email) {
+    const pendingSnap = await getDocs(
+      query(
+        collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+        where('recipientEmail', '==', email),
+        where('status', '==', 'pending'),
+      ),
+    );
+
+    for (const docSnap of pendingSnap.docs) {
+      const data = docSnap.data();
+      const batch = writeBatch(db());
+      batch.update(docSnap.ref, {
+        recipientUid: currentUser.uid,
+        status: 'active',
+      });
+      if (data.cardId) {
+        batch.update(doc(db(), COLLECTIONS.CARDS, data.cardId), {
+          sharedUserIds: arrayUnion(currentUser.uid),
+        });
+      }
+      await batch.commit();
+      updatedCount++;
+    }
+  }
+
+  if (appleId) {
+    const pendingSnap = await getDocs(
+      query(
+        collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+        where('recipientAppleId', '==', appleId),
+        where('status', '==', 'pending'),
+      ),
+    );
+
+    for (const docSnap of pendingSnap.docs) {
+      const data = docSnap.data();
+      const batch = writeBatch(db());
+      batch.update(docSnap.ref, {
+        recipientUid: currentUser.uid,
+        status: 'active',
+      });
+      if (data.cardId) {
+        batch.update(doc(db(), COLLECTIONS.CARDS, data.cardId), {
+          sharedUserIds: arrayUnion(currentUser.uid),
+        });
+      }
+      await batch.commit();
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
 };

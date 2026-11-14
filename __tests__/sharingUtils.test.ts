@@ -1,5 +1,15 @@
 import { describe, it, expect } from '@jest/globals';
-import { accessDocId, canShareToGroup, uniqueIds, toTimestampMillis, getCardSortTimestamp, sortCardsByLatest } from '../src/services/sharingUtils';
+import {
+  accessDocId,
+  canShareToGroup,
+  uniqueIds,
+  toTimestampMillis,
+  getCardSortTimestamp,
+  sortCardsByLatest,
+  userAccessDocId,
+  validateRecipientIdentifier,
+  isSelfRecipient,
+} from '../src/services/sharingUtils';
 import { CONTRIBUTION } from '../src/constants/Firestore';
 import { Group, Card } from '../src/types/Types';
 
@@ -16,6 +26,80 @@ const group = (overrides: Partial<Group> = {}): Group => ({
 describe('sharing helpers', () => {
   it('creates a deterministic access document id', () => {
     expect(accessDocId('cardA', 'groupB')).toBe('cardA_groupB');
+  });
+
+  it('creates a deterministic user access document id', () => {
+    expect(userAccessDocId('card123', 'alice@example.com')).toBe('card123_alice@example.com');
+    expect(userAccessDocId('card123', 'pending_bob@example.com')).toBe('card123_pending_bob@example.com');
+  });
+
+  describe('validateRecipientIdentifier', () => {
+    it('validates and normalizes valid email addresses', () => {
+      const res = validateRecipientIdentifier('  Alice@Example.COM  ');
+      expect(res.isValid).toBe(true);
+      expect(res.type).toBe('email');
+      expect(res.identifier).toBe('alice@example.com');
+      expect(res.error).toBeUndefined();
+    });
+
+    it('rejects malformed email addresses', () => {
+      const res1 = validateRecipientIdentifier('alice@');
+      expect(res1.isValid).toBe(false);
+      expect(res1.error).toBeDefined();
+
+      const res2 = validateRecipientIdentifier('abc');
+      expect(res2.isValid).toBe(false);
+      expect(res2.error).toContain('Apple');
+    });
+
+    it('recognizes valid Apple user identifiers', () => {
+      const appleId = '001234.abcdef1234567890abcdef.1234';
+      const res = validateRecipientIdentifier(`  ${appleId}  `);
+      expect(res.isValid).toBe(true);
+      expect(res.type).toBe('appleId');
+      expect(res.identifier).toBe(appleId);
+    });
+
+    it('handles empty or blank input', () => {
+      const res = validateRecipientIdentifier('   ');
+      expect(res.isValid).toBe(false);
+      expect(res.identifier).toBe('');
+      expect(res.error).toBe('Please enter an Email address or Apple ID.');
+    });
+  });
+
+  describe('isSelfRecipient', () => {
+    const user = {
+      uid: 'user_123',
+      email: 'user@example.com',
+      appleUserId: '001234.abcdef.1234',
+    };
+
+    it('identifies self when matching email address case-insensitively', () => {
+      expect(isSelfRecipient('user@example.com', user)).toBe(true);
+      expect(isSelfRecipient('  USER@Example.COM  ', user)).toBe(true);
+    });
+
+    it('identifies self when matching Apple user identifier', () => {
+      expect(isSelfRecipient('001234.abcdef.1234', user)).toBe(true);
+      expect(isSelfRecipient('  001234.abcdef.1234  ', user)).toBe(true);
+    });
+
+    it('identifies self when matching uid', () => {
+      expect(isSelfRecipient('user_123', user)).toBe(true);
+    });
+
+    it('returns false for other recipients', () => {
+      expect(isSelfRecipient('other@example.com', user)).toBe(false);
+      expect(isSelfRecipient('009999.xyz.5678', user)).toBe(false);
+      expect(isSelfRecipient('other_uid', user)).toBe(false);
+    });
+
+    it('returns false for null or undefined input', () => {
+      expect(isSelfRecipient('', user)).toBe(false);
+      expect(isSelfRecipient('user@example.com', null)).toBe(false);
+      expect(isSelfRecipient('user@example.com', undefined)).toBe(false);
+    });
   });
 
   it('deduplicates card ids', () => {

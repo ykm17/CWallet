@@ -10,7 +10,7 @@ import { addMemberToGroup, deleteGroup, leaveGroup, listenGroup, listenGroupMemb
 import { listenAccessForGroup } from '../services/sharingService';
 import { fetchCardsByIds } from '../services/cardService';
 import CustomCard from '../components/CustomCard';
-import { contributionLabel, sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
+import { contributionLabel, isSelfRecipient, sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { ConnectivityContext } from '../util/Connectivity';
 import { APP_NAME } from '../constants/Constants';
@@ -142,7 +142,18 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       Alert.alert('Offline', 'You must be online to add group members.');
       return;
     }
-    if (!memberEmail.trim()) {
+    const trimmedInput = memberEmail.trim();
+    if (!trimmedInput) {
+      return;
+    }
+    const currentUser = auth().currentUser;
+    const currentAppleId = currentUser?.providerData?.find((p) => p.providerId === 'apple.com')?.uid || '';
+    if (
+      trimmedInput === uid ||
+      trimmedInput === group?.ownerId ||
+      isSelfRecipient(trimmedInput, { uid, email: currentUser?.email, appleUserId: currentAppleId })
+    ) {
+      Alert.alert('Cannot add creator', 'You created this group and are already its owner.');
       return;
     }
     try {
@@ -432,6 +443,8 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         <FlatList
           data={members}
           keyExtractor={(item) => item.userId}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

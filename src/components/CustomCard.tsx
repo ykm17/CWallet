@@ -135,11 +135,23 @@ const CustomCard: React.FC<CardProps> = ({
     ? cardDetails.accessGroupNames
     : (cardDetails.sharedGroupIds || []).map((_, i) => `Group ${i + 1}`);
 
-  const sharedGroupCount = cardDetails.sharedGroupIds?.length || (cardDetails.accessGroupNames?.length || 0);
+  const sharedGroupCount = cardDetails.sharedGroupIds?.length || 0;
+  const sharedPeople = cardDetails.sharedWithUsers || [];
+  const sharedPeopleCount = sharedPeople.length;
+  const totalSharedCount = sharedGroupCount + sharedPeopleCount;
+
+  const recipientAccessParts: string[] = [];
+  if (cardDetails.accessGroupNames?.length) {
+    recipientAccessParts.push(`via ${cardDetails.accessGroupNames.join(', ')}`);
+  }
+  if (cardDetails.accessUserNames?.length) {
+    recipientAccessParts.push(`from ${cardDetails.accessUserNames.join(', ')}`);
+  }
+  const recipientAccessLabel = recipientAccessParts.join(' • ');
 
   const hasLeftElement = isOwner
-    ? sharedGroupCount > 0
-    : Boolean(cardDetails.accessGroupNames?.length);
+    ? totalSharedCount > 0
+    : Boolean(recipientAccessParts.length);
 
   return (
     <TouchableWithoutFeedback
@@ -188,7 +200,7 @@ const CustomCard: React.FC<CardProps> = ({
                   <Icon source="share-variant" color="white" size={18} />
                 </TouchableOpacity>
               )}
-              {onUnshare && !!cardDetails.sharedGroupIds?.length && (
+              {onUnshare && totalSharedCount > 0 && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={() => onUnshare(cardDetails)}
@@ -303,7 +315,7 @@ const CustomCard: React.FC<CardProps> = ({
           </View>
         </View>
 
-        {/* Bottom Row: Shared status or via group on left, Copy Card on right (same line) */}
+        {/* Bottom Row: Shared status or via group/person on left, Copy Card on right (same line) */}
         <View style={[styles.cardBottomRow, !hasLeftElement && { justifyContent: 'center' }]}>
           {hasLeftElement && (
             isOwner ? (
@@ -313,8 +325,8 @@ const CustomCard: React.FC<CardProps> = ({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Icon source="account-group-outline" size={12} color="rgba(255, 255, 255, 0.85)" />
-                <Text style={styles.sharedBadgeText}>Shared ({sharedGroupCount})</Text>
+                <Icon source="share-variant" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Text style={styles.sharedBadgeText}>Shared ({totalSharedCount})</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -323,9 +335,9 @@ const CustomCard: React.FC<CardProps> = ({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Icon source="account-group-outline" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Icon source="share-variant" size={12} color="rgba(255, 255, 255, 0.85)" />
                 <Text style={styles.accessGroupsText} numberOfLines={1}>
-                  via {cardDetails.accessGroupNames?.join(', ')}
+                  {recipientAccessLabel}
                 </Text>
               </TouchableOpacity>
             )
@@ -372,20 +384,52 @@ const CustomCard: React.FC<CardProps> = ({
               </View>
 
               <Text style={styles.groupsDialogMessage}>
-                This card is currently shared with {sharedGroupCount} {sharedGroupCount === 1 ? 'group' : 'groups'}:
+                This card is currently shared with:
               </Text>
 
               <ScrollView style={styles.groupsListContainer} bounces={false}>
-                {groupNames.map((name, index) => (
-                  <View key={`${name}-${index}`} style={styles.groupItemRow}>
-                    <View style={styles.groupItemIcon}>
-                      <Icon source="account-group-outline" size={15} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.groupItemText} numberOfLines={1}>
-                      {name}
+                {groupNames.length > 0 && (
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#6B7280', marginBottom: 4, textTransform: 'uppercase' }}>
+                      Groups ({groupNames.length})
                     </Text>
+                    {groupNames.map((name, index) => (
+                      <View key={`grp-${name}-${index}`} style={styles.groupItemRow}>
+                        <View style={styles.groupItemIcon}>
+                          <Icon source="account-group-outline" size={15} color="#FFFFFF" />
+                        </View>
+                        <Text style={styles.groupItemText} numberOfLines={1}>
+                          {name}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
+                )}
+
+                {sharedPeople.length > 0 && (
+                  <View style={{ marginBottom: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#6B7280', marginBottom: 4, textTransform: 'uppercase' }}>
+                      People ({sharedPeople.length})
+                    </Text>
+                    {sharedPeople.map((person, index) => (
+                      <View key={`usr-${person.email || person.appleUserId || index}`} style={styles.groupItemRow}>
+                        <View style={[styles.groupItemIcon, { backgroundColor: '#3B82F6' }]}>
+                          <Icon source="account-outline" size={15} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.groupItemText} numberOfLines={1}>
+                            {person.displayName || person.email || person.appleUserId}
+                          </Text>
+                          {person.email && person.displayName && (
+                            <Text style={{ fontSize: 11, color: '#9CA3AF' }} numberOfLines={1}>
+                              {person.email}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
 
               <TouchableOpacity

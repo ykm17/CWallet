@@ -3,6 +3,7 @@ export const COLLECTIONS = {
   GROUPS: 'groups',
   MEMBERS: 'members',
   CARD_GROUP_ACCESS: 'cardGroupAccess',
+  CARD_USER_ACCESS: 'cardUserAccess',
   USERS: 'users',
   ACCESS_LIST: 'accessList',
 } as const;

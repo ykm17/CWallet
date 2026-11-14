@@ -81,6 +81,16 @@ service cloud.firestore {
         );
     }
 
+    function canReadUserSharedCard(card) {
+      return (card.keys().hasAny(['sharedUserIds'])
+        && card.sharedUserIds is list
+        && request.auth.uid in card.sharedUserIds)
+        || (card.keys().hasAny(['sharedEmails'])
+        && card.sharedEmails is list
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in card.sharedEmails);
+    }
+
     function canContributeToGroup(groupId) {
       return isActiveMember(groupId)
         && (
@@ -107,6 +117,7 @@ service cloud.firestore {
         && (
           resource.data.ownerId == request.auth.uid
           || canReadSharedCard(resource.data)
+          || canReadUserSharedCard(resource.data)
         );
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn()
@@ -183,6 +194,27 @@ service cloud.firestore {
           isCardOwner(resource.data.cardId)
           || isGroupOwner(resource.data.groupId)
           || resource.data.sharedBy == request.auth.uid
+        );
+    }
+
+    match /cardUserAccess/{accessId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.recipientUid == request.auth.uid
+          || resource.data.sharedBy == request.auth.uid
+          || isCardOwner(resource.data.cardId)
+          || (request.auth.token.email != null && resource.data.recipientEmail == request.auth.token.email.lower())
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.sharedBy == request.auth.uid
+        && isCardOwner(request.resource.data.cardId);
+      allow update: if isSignedIn()
+        && (resource.data.sharedBy == request.auth.uid || resource.data.recipientEmail == request.auth.token.email.lower());
+      allow delete: if isSignedIn()
+        && (
+          resource.data.sharedBy == request.auth.uid
+          || resource.data.recipientUid == request.auth.uid
+          || isCardOwner(resource.data.cardId)
         );
     }
   }

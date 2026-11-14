@@ -31,6 +31,10 @@ export const parseCardDocument = (snapshotDoc: any): Card | null => {
       key: snapshotDoc.id,
       ownerId: data.ownerId,
       sharedGroupIds: data.sharedGroupIds || [],
+      sharedUserIds: data.sharedUserIds || [],
+      sharedEmails: data.sharedEmails || [],
+      sharedAppleIds: data.sharedAppleIds || [],
+      sharedWithUsers: data.sharedWithUsers || [],
       isPersonal: decryptedCard.isPersonal ?? true,
       addedAt,
       createdAt: addedAt,
@@ -80,7 +84,14 @@ export const deleteOwnedCard = async (cardId: string): Promise<void> => {
   const accessSnap = await getDocs(
     query(collection(db(), COLLECTIONS.CARD_GROUP_ACCESS), where('cardId', '==', cardId)),
   );
-  const refsToDelete = [cardRef, ...accessSnap.docs.map((accessDoc: any) => accessDoc.ref)];
+  const userAccessSnap = await getDocs(
+    query(collection(db(), COLLECTIONS.CARD_USER_ACCESS), where('cardId', '==', cardId)),
+  );
+  const refsToDelete = [
+    cardRef,
+    ...accessSnap.docs.map((accessDoc: any) => accessDoc.ref),
+    ...userAccessSnap.docs.map((accessDoc: any) => accessDoc.ref),
+  ];
   for (const chunk of chunkForBatch(refsToDelete)) {
     const batch = writeBatch(db());
     chunk.forEach((ref) => batch.delete(ref));

@@ -3,7 +3,80 @@ import { Card, ContributionPermission, Group } from '../types/Types';
 
 export const accessDocId = (cardId: string, groupId: string): string => `${cardId}_${groupId}`;
 
+export const userAccessDocId = (cardId: string, recipientKey: string): string => `${cardId}_${recipientKey}`;
+
 export const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+export interface RecipientValidation {
+  isValid: boolean;
+  isEmail: boolean;
+  type: 'email' | 'appleId' | 'unknown';
+  identifier: string;
+  normalized: string;
+  error?: string;
+}
+
+export const validateRecipientIdentifier = (
+  input: string,
+): RecipientValidation => {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return {
+      isValid: false,
+      isEmail: false,
+      type: 'unknown',
+      identifier: '',
+      normalized: '',
+      error: 'Please enter an Email address or Apple ID.',
+    };
+  }
+  if (trimmed.includes('@')) {
+    const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+    const normalized = trimmed.toLowerCase();
+    return {
+      isValid: isEmailValid,
+      isEmail: true,
+      type: 'email',
+      identifier: normalized,
+      normalized,
+      error: isEmailValid ? undefined : 'Please enter a valid email address (e.g., name@example.com).',
+    };
+  }
+  // Apple User Identifier (typically format like 001234.abcdef or alphanumeric string >= 5 chars without spaces)
+  const isAppleIdValid = trimmed.length >= 5 && !/\s/.test(trimmed);
+  return {
+    isValid: isAppleIdValid,
+    isEmail: false,
+    type: 'appleId',
+    identifier: trimmed,
+    normalized: trimmed,
+    error: isAppleIdValid
+      ? undefined
+      : 'Please enter a valid Apple User ID (alphanumeric, at least 5 characters).',
+  };
+};
+
+/**
+ * Checks whether a given identifier refers to the current user (self).
+ */
+export const isSelfRecipient = (
+  identifier: string,
+  user?: { uid?: string; email?: string | null; appleUserId?: string | null } | null,
+): boolean => {
+  if (!identifier || !user) return false;
+  const trimmed = identifier.trim();
+  const normalized = trimmed.toLowerCase();
+  if (user.uid && (trimmed === user.uid || normalized === user.uid.toLowerCase())) {
+    return true;
+  }
+  if (user.email && normalized === normalizeEmail(user.email)) {
+    return true;
+  }
+  if (user.appleUserId && trimmed === user.appleUserId.trim()) {
+    return true;
+  }
+  return false;
+};
 
 export const chunkArray = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = [];

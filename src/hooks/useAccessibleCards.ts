@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import auth from '@react-native-firebase/auth';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
-import { Card, CardGroupAccess, Group } from '../types/Types';
+import { Card, CardGroupAccess, CardUserAccess, Group } from '../types/Types';
 import { COLLECTIONS } from '../constants/Firestore';
 import { parseCardDocument } from '../services/cardService';
-import { listenAccessForGroups } from '../services/sharingService';
+import { listenAccessForGroups, listenAccessForUser } from '../services/sharingService';
+import { getAppleUserId } from '../services/userService';
 import { sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
 
 export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
   const [accessRecords, setAccessRecords] = useState<CardGroupAccess[]>([]);
+  const [userAccessRecords, setUserAccessRecords] = useState<CardUserAccess[]>([]);
   const [cardsById, setCardsById] = useState<Record<string, Card>>({});
   const [loading, setLoading] = useState(false);
   const cardUnsubsRef = useRef<Array<() => void>>([]);
@@ -20,7 +23,7 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
       return;
     }
     setLoading(true);
-    const unsubscribe = listenAccessForGroups(
+    const unsubGroups = listenAccessForGroups(
       groupList.map((group) => group.groupId),
       (records) => {
         setAccessRecords(records);
@@ -31,13 +34,33 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
         setLoading(false);
       },
     );
-    return unsubscribe;
+
+    const currentUser = auth().currentUser;
+    const unsubUser = currentUser?.uid
+      ? listenAccessForUser(
+          currentUser.uid,
+          currentUser.email || '',
+          getAppleUserId(currentUser),
+          (records) => {
+            setUserAccessRecords(records);
+          },
+          (error) => {
+            console.error('Failed to load 1-to-1 card access', error);
+          },
+        )
+      : () => {};
+
+    return () => {
+      unsubGroups();
+      unsubUser();
+    };
   }, [enabled, groupIds]);
 
-  const cardIdsKey = useMemo(
-    () => Array.from(new Set(accessRecords.map((record) => record.cardId))).sort().join(','),
-    [accessRecords],
-  );
+  const cardIdsKey = useMemo(() => {
+    const fromGroups = accessRecords.map((r) => r.cardId);
+    const fromUsers = userAccessRecords.map((r) => r.cardId);
+    return Array.from(new Set([...fromGroups, ...fromUsers])).sort().join(',');
+  }, [accessRecords, userAccessRecords]);
 
   useEffect(() => {
     cardUnsubsRef.current.forEach((unsubscribe) => unsubscribe());
@@ -92,6 +115,7 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
       return acc;
     }, {});
     const groupIdsByCard: Record<string, string[]> = {};
+    const userAccessByCard: Record<string, CardUserAccess[]> = {};
     const latestSharedAtByCard: Record<string, number> = {};
 
     accessRecords.forEach((record) => {
@@ -107,8 +131,21 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
       }
     });
 
+    userAccessRecords.forEach((record) => {
+      if (!userAccessByCard[record.cardId]) {
+        userAccessByCard[record.cardId] = [];
+      }
+      userAccessByCard[record.cardId].push(record);
+      const recordSharedAt = toTimestampMillis(record.sharedAt);
+      if (recordSharedAt > (latestSharedAtByCard[record.cardId] || 0)) {
+        latestSharedAtByCard[record.cardId] = recordSharedAt;
+      }
+    });
+
     const mapped = Object.values(cardsById).map((card) => {
       const matchedGroupNames = new Set<string>();
+      const matchedUserNames = new Set<string>();
+      let sharedByInfo: { name?: string; email?: string } | undefined;
 
       // 1. From cardGroupAccess records for the user's groups
       (groupIdsByCard[card.key] || []).forEach((gid) => {
@@ -124,17 +161,31 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
         }
       });
 
+      // 3. From cardUserAccess records directly shared with current user
+      (userAccessByCard[card.key] || []).forEach((uRec) => {
+        const name = uRec.sharedByName || uRec.sharedByEmail || 'Direct share';
+        matchedUserNames.add(name);
+        if (!sharedByInfo) {
+          sharedByInfo = {
+            name: uRec.sharedByName,
+            email: uRec.sharedByEmail,
+          };
+        }
+      });
+
       const sharedAt = latestSharedAtByCard[card.key] || toTimestampMillis(card.sharedAt) || undefined;
 
       return {
         ...card,
         sharedAt,
         accessGroupNames: Array.from(matchedGroupNames),
+        accessUserNames: Array.from(matchedUserNames),
+        sharedByInfo,
       };
     });
 
     return sortCardsByLatest(mapped);
-  }, [cardsById, accessRecords, groupList]);
+  }, [cardsById, accessRecords, userAccessRecords, groupList]);
 
-  return { cards, accessRecords, loading };
+  return { cards, accessRecords, userAccessRecords, loading };
 };

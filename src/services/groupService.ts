@@ -17,7 +17,7 @@ import {
 import { getFirestore } from '@react-native-firebase/firestore';
 import { COLLECTIONS, CONTRIBUTION, MEMBER_ROLE, MEMBER_STATUS } from '../constants/Firestore';
 import { ContributionPermission, Group, GroupMember, WalletUser } from '../types/Types';
-import { chunkForBatch, normalizeEmail } from './sharingUtils';
+import { chunkForBatch, isSelfRecipient, normalizeEmail } from './sharingUtils';
 import { findRegisteredUser, findUserByEmail, hasAccessListEntry, isValidEmail } from './userService';
 import { APP_NAME } from '../constants/Constants';
 
@@ -130,15 +130,42 @@ export const addMemberToGroup = async (groupId: string, identifier: string): Pro
     throw new Error('Please enter an email address or Apple user ID.');
   }
 
-  const currentEmail = auth().currentUser?.email?.toLowerCase().trim();
-  if (currentEmail && normalizeEmail(trimmed) === currentEmail) {
-    throw new Error('You are already the owner of this group.');
+  const currentUser = auth().currentUser;
+  const currentEmail = currentUser?.email ? normalizeEmail(currentUser.email) : '';
+  const currentAppleId = currentUser?.providerData?.find((p) => p.providerId === 'apple.com')?.uid || '';
+  const normalizedInput = trimmed.toLowerCase();
+
+  // Prevent creator / owner from adding themselves
+  if (
+    trimmed === uid ||
+    trimmed === group.ownerId ||
+    isSelfRecipient(trimmed, { uid, email: currentEmail, appleUserId: currentAppleId })
+  ) {
+    throw new Error('You created this group and are already its owner.');
+  }
+
+  // Also check if owner member doc in group has matching email or appleUserId
+  try {
+    const ownerMemberDoc = await getDoc(doc(db(), COLLECTIONS.GROUPS, groupId, COLLECTIONS.MEMBERS, group.ownerId));
+    const ownerData = ownerMemberDoc.data();
+    if (ownerData) {
+      const ownerEmail = ownerData.email ? normalizeEmail(ownerData.email) : '';
+      const ownerAppleId = ownerData.appleUserId || '';
+      if (
+        (ownerEmail && normalizedInput === ownerEmail) ||
+        (ownerAppleId && trimmed === ownerAppleId)
+      ) {
+        throw new Error('You created this group and are already its owner.');
+      }
+    }
+  } catch (e: any) {
+    if (e.message?.includes('already its owner')) throw e;
   }
 
   const user = await findRegisteredUser(trimmed);
   if (user) {
-    if (user.uid === uid) {
-      throw new Error('You are already the owner of this group.');
+    if (user.uid === uid || user.uid === group.ownerId) {
+      throw new Error('You created this group and are already its owner.');
     }
     if (group.memberIds.includes(user.uid)) {
       throw new Error('This user is already a member of the group.');
