@@ -7,11 +7,15 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +33,7 @@ import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -69,6 +74,10 @@ class CardScannerActivity : AppCompatActivity() {
     private lateinit var chipBank: TextView
     private lateinit var retryBtn: TextView
     private lateinit var proceedBtn: TextView
+
+    private lateinit var torchDrawable: SolidBoltDrawable
+    private lateinit var orientationDrawable: SolidCardOrientationDrawable
+    private lateinit var retryDrawable: SolidRefreshDrawable
 
     private var camera: Camera? = null
     private var isTorchOn = false
@@ -136,7 +145,17 @@ class CardScannerActivity : AppCompatActivity() {
         }
         rootLayout.addView(overlayView)
 
-        // Top Control Bar: [✕ Cancel] [spacer] [⚡ Torch]
+        // Top Control Bar: [Close] [spacer] [Torch]
+        val density = resources.displayMetrics.density
+        torchDrawable = SolidBoltDrawable(Color.WHITE, density)
+        val closeDrawable = SolidCloseDrawable(Color.WHITE, 2.2f, density)
+        retryDrawable = SolidRefreshDrawable(Color.WHITE, density).apply {
+            setBounds(0, 0, dp(15f), dp(15f))
+        }
+        orientationDrawable = SolidCardOrientationDrawable(isVertical = isVerticalCard, color = Color.WHITE, density = density).apply {
+            setBounds(0, 0, dp(16f), dp(16f))
+        }
+
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -150,12 +169,10 @@ class CardScannerActivity : AppCompatActivity() {
             }
         }
 
-        val closeBtn = TextView(this).apply {
-            text = "✕"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            gravity = Gravity.CENTER
-            setPadding(dp(10f), dp(6f), dp(10f), dp(6f))
+        val closeBtn = ImageView(this).apply {
+            setImageDrawable(closeDrawable)
+            layoutParams = LinearLayout.LayoutParams(dp(40f), dp(40f))
+            setPadding(dp(11f), dp(11f), dp(11f), dp(11f))
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#66000000"))
                 cornerRadius = dp(20f).toFloat()
@@ -172,18 +189,16 @@ class CardScannerActivity : AppCompatActivity() {
         }
         topBar.addView(spacer1)
 
-        val torchBtn = TextView(this).apply {
-            text = "⚡"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-            gravity = Gravity.CENTER
-            setPadding(dp(10f), dp(6f), dp(10f), dp(6f))
+        val torchBtn = ImageView(this).apply {
+            setImageDrawable(torchDrawable)
+            layoutParams = LinearLayout.LayoutParams(dp(40f), dp(40f))
+            setPadding(dp(11f), dp(11f), dp(11f), dp(11f))
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#66000000"))
                 cornerRadius = dp(20f).toFloat()
             }
             setOnClickListener {
-                toggleTorch(this)
+                toggleTorch()
             }
         }
         topBar.addView(torchBtn)
@@ -254,7 +269,7 @@ class CardScannerActivity : AppCompatActivity() {
         chipsScroll.addView(chipsRow)
         bottomContainer.addView(chipsScroll)
 
-        // Secondary Action Row: [ 🔄 Retry ] and [ 🔄 Card: Horiz ]
+        // Secondary Action Row: [ Retry ] and [ Card: Horizontal / Vertical ]
         val secondaryRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -267,12 +282,14 @@ class CardScannerActivity : AppCompatActivity() {
         }
 
         retryBtn = TextView(this).apply {
-            text = "🔄 Retry"
+            text = "Retry"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setPadding(dp(14f), dp(7f), dp(14f), dp(7f))
+            setPadding(dp(12f), dp(7f), dp(14f), dp(7f))
+            setCompoundDrawables(retryDrawable, null, null, null)
+            compoundDrawablePadding = dp(6f)
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#80374151"))
                 cornerRadius = dp(16f).toFloat()
@@ -292,12 +309,14 @@ class CardScannerActivity : AppCompatActivity() {
 
         // Orientation Toggle Button
         orientationBtn = TextView(this).apply {
-            text = "🔄 Card: Horiz"
+            text = "Card: Horizontal"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setPadding(dp(12f), dp(7f), dp(12f), dp(7f))
+            setPadding(dp(12f), dp(7f), dp(14f), dp(7f))
+            setCompoundDrawables(orientationDrawable, null, null, null)
+            compoundDrawablePadding = dp(6f)
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#80000000"))
                 cornerRadius = dp(16f).toFloat()
@@ -368,11 +387,9 @@ class CardScannerActivity : AppCompatActivity() {
     private fun updateScannerUI() {
         if (isCompleted) return
 
-        // 1. Update Chips
+        // 1. Update Chips (Show full text for all detected fields)
         if (detectedCardNumber.isNotEmpty()) {
-            val digits = detectedCardNumber.filter { it.isDigit() }
-            val last4 = if (digits.length >= 4) digits.takeLast(4) else digits
-            chipNumber.text = "✓ ••$last4"
+            chipNumber.text = "✓ $detectedCardNumber"
             chipNumber.setTextColor(Color.WHITE)
             (chipNumber.background as? GradientDrawable)?.apply {
                 setColor(Color.parseColor("#10B981"))
@@ -399,8 +416,7 @@ class CardScannerActivity : AppCompatActivity() {
         }
 
         if (detectedOwnerName.isNotEmpty()) {
-            val shortName = if (detectedOwnerName.length > 10) detectedOwnerName.take(9) + "…" else detectedOwnerName
-            chipName.text = "✓ $shortName"
+            chipName.text = "✓ $detectedOwnerName"
             chipName.setTextColor(Color.WHITE)
             (chipName.background as? GradientDrawable)?.apply {
                 setColor(Color.parseColor("#10B981"))
@@ -443,7 +459,7 @@ class CardScannerActivity : AppCompatActivity() {
         // 3. Update Proceed Button
         if (detectedCardNumber.isNotEmpty()) {
             proceedBtn.isEnabled = true
-            proceedBtn.text = "Proceed with Scanned Details →"
+            proceedBtn.text = "Proceed with Scanned Details"
             proceedBtn.setTextColor(Color.WHITE)
             (proceedBtn.background as? GradientDrawable)?.apply {
                 setColor(Color.parseColor("#10B981"))
@@ -510,16 +526,17 @@ class CardScannerActivity : AppCompatActivity() {
     private fun toggleCardOrientation() {
         isVerticalCard = !isVerticalCard
         overlayView.setOrientation(isVerticalCard)
-        orientationBtn.text = if (isVerticalCard) "🔄 Card: Vert" else "🔄 Card: Horiz"
+        orientationDrawable.setVertical(isVerticalCard)
+        orientationBtn.text = if (isVerticalCard) "Card: Vertical" else "Card: Horizontal"
         updateScannerUI()
     }
 
-    private fun toggleTorch(view: TextView) {
+    private fun toggleTorch() {
         val cam = camera ?: return
         if (cam.cameraInfo.hasFlashUnit()) {
             isTorchOn = !isTorchOn
             cam.cameraControl.enableTorch(isTorchOn)
-            view.setTextColor(if (isTorchOn) Color.parseColor("#F59E0B") else Color.WHITE)
+            torchDrawable.setColor(if (isTorchOn) Color.parseColor("#F59E0B") else Color.WHITE)
         }
     }
 
@@ -1384,4 +1401,276 @@ class CardScannerActivity : AppCompatActivity() {
             }
         }
     }
+}
+
+// =========================================================================
+// Solid Vector Drawables for Clean Professional Native Scan Page UI
+// =========================================================================
+
+class SolidCloseDrawable(
+    private var color: Int = Color.WHITE,
+    private val strokeWidthDp: Float = 2.2f,
+    private val density: Float = 1f
+) : Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidCloseDrawable.color
+        style = Paint.Style.STROKE
+        strokeWidth = strokeWidthDp * density
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    fun setColor(newColor: Int) {
+        if (color != newColor) {
+            color = newColor
+            paint.color = newColor
+            invalidateSelf()
+        }
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val pad = 4f * density
+        val left = b.left + pad
+        val top = b.top + pad
+        val right = b.right - pad
+        val bottom = b.bottom - pad
+
+        canvas.drawLine(left, top, right, bottom, paint)
+        canvas.drawLine(right, top, left, bottom, paint)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        paint.alpha = alpha
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        paint.colorFilter = colorFilter
+        invalidateSelf()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    override fun getIntrinsicWidth(): Int = (18 * density).toInt()
+    override fun getIntrinsicHeight(): Int = (18 * density).toInt()
+}
+
+class SolidBoltDrawable(
+    private var color: Int = Color.WHITE,
+    private val density: Float = 1f
+) : Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidBoltDrawable.color
+        style = Paint.Style.FILL
+    }
+    private val path = Path()
+
+    fun setColor(newColor: Int) {
+        if (color != newColor) {
+            color = newColor
+            paint.color = newColor
+            invalidateSelf()
+        }
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val cx = b.exactCenterX()
+        val cy = b.exactCenterY()
+
+        val boltW = 10f * density
+        val boltH = 18f * density
+        val left = cx - boltW / 2f
+        val top = cy - boltH / 2f
+
+        path.reset()
+        path.moveTo(left + boltW * 0.65f, top)
+        path.lineTo(left, top + boltH * 0.52f)
+        path.lineTo(left + boltW * 0.45f, top + boltH * 0.52f)
+        path.lineTo(left + boltW * 0.35f, top + boltH)
+        path.lineTo(left + boltW, top + boltH * 0.44f)
+        path.lineTo(left + boltW * 0.55f, top + boltH * 0.44f)
+        path.close()
+
+        canvas.drawPath(path, paint)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        paint.alpha = alpha
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        paint.colorFilter = colorFilter
+        invalidateSelf()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    override fun getIntrinsicWidth(): Int = (18 * density).toInt()
+    override fun getIntrinsicHeight(): Int = (18 * density).toInt()
+}
+
+class SolidRefreshDrawable(
+    private var color: Int = Color.WHITE,
+    private val density: Float = 1f
+) : Drawable() {
+    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidRefreshDrawable.color
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidRefreshDrawable.color
+        style = Paint.Style.FILL
+    }
+    private val arrowPath = Path()
+    private val arcRect = RectF()
+
+    fun setColor(newColor: Int) {
+        if (color != newColor) {
+            color = newColor
+            arcPaint.color = newColor
+            arrowPaint.color = newColor
+            invalidateSelf()
+        }
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val size = Math.min(b.width(), b.height()).toFloat()
+        val pad = 2f * density
+        val left = b.left + pad
+        val top = b.top + pad
+        val right = b.left + size - pad
+        val bottom = b.top + size - pad
+
+        arcRect.set(left, top, right, bottom)
+        canvas.drawArc(arcRect, 50f, 280f, false, arcPaint)
+
+        val cx = arcRect.centerX()
+        val cy = arcRect.centerY()
+        val r = arcRect.width() / 2f
+        val rad = Math.toRadians(50.0)
+        val tipX = (cx + r * Math.cos(rad)).toFloat()
+        val tipY = (cy + r * Math.sin(rad)).toFloat()
+
+        val arrowSize = 3.5f * density
+        arrowPath.reset()
+        arrowPath.moveTo(tipX, tipY)
+        arrowPath.lineTo(tipX + arrowSize * 1.2f, tipY - arrowSize * 0.4f)
+        arrowPath.lineTo(tipX + arrowSize * 0.4f, tipY - arrowSize * 1.2f)
+        arrowPath.close()
+
+        canvas.drawPath(arrowPath, arrowPaint)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        arcPaint.alpha = alpha
+        arrowPaint.alpha = alpha
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        arcPaint.colorFilter = colorFilter
+        arrowPaint.colorFilter = colorFilter
+        invalidateSelf()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    override fun getIntrinsicWidth(): Int = (15 * density).toInt()
+    override fun getIntrinsicHeight(): Int = (15 * density).toInt()
+}
+
+class SolidCardOrientationDrawable(
+    private var isVertical: Boolean = false,
+    private var color: Int = Color.WHITE,
+    private val density: Float = 1f
+) : Drawable() {
+    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidCardOrientationDrawable.color
+        style = Paint.Style.STROKE
+        strokeWidth = 1.6f * density
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = this@SolidCardOrientationDrawable.color
+        style = Paint.Style.FILL
+    }
+    private val cardRect = RectF()
+
+    fun setVertical(vertical: Boolean) {
+        if (isVertical != vertical) {
+            isVertical = vertical
+            invalidateSelf()
+        }
+    }
+
+    fun setColor(newColor: Int) {
+        if (color != newColor) {
+            color = newColor
+            bodyPaint.color = newColor
+            fillPaint.color = newColor
+            invalidateSelf()
+        }
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val cx = b.exactCenterX()
+        val cy = b.exactCenterY()
+        val cornerR = 2f * density
+
+        if (isVertical) {
+            val cardW = 10f * density
+            val cardH = 15f * density
+            cardRect.set(cx - cardW / 2, cy - cardH / 2, cx + cardW / 2, cy + cardH / 2)
+            canvas.drawRoundRect(cardRect, cornerR, cornerR, bodyPaint)
+            val chipRect = RectF(
+                cx - cardW / 2 + 2f * density,
+                cy - cardH / 2 + 3f * density,
+                cx + 1f * density,
+                cy - cardH / 2 + 6f * density
+            )
+            canvas.drawRoundRect(chipRect, 0.5f * density, 0.5f * density, fillPaint)
+        } else {
+            val cardW = 15f * density
+            val cardH = 10f * density
+            cardRect.set(cx - cardW / 2, cy - cardH / 2, cx + cardW / 2, cy + cardH / 2)
+            canvas.drawRoundRect(cardRect, cornerR, cornerR, bodyPaint)
+            val chipRect = RectF(
+                cx - cardW / 2 + 2.5f * density,
+                cy - 1.5f * density,
+                cx - cardW / 2 + 5.5f * density,
+                cy + 1.5f * density
+            )
+            canvas.drawRoundRect(chipRect, 0.5f * density, 0.5f * density, fillPaint)
+        }
+    }
+
+    override fun setAlpha(alpha: Int) {
+        bodyPaint.alpha = alpha
+        fillPaint.alpha = alpha
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        bodyPaint.colorFilter = colorFilter
+        fillPaint.colorFilter = colorFilter
+        invalidateSelf()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    override fun getIntrinsicWidth(): Int = (16 * density).toInt()
+    override fun getIntrinsicHeight(): Int = (16 * density).toInt()
 }

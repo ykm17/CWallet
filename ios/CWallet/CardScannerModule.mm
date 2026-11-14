@@ -228,22 +228,24 @@
   UIView *topBar = [[UIView alloc] initWithFrame:CGRectMake(0, 44, self.view.bounds.size.width, 50)];
   [self.view addSubview:topBar];
   
-  // Close Button (✕)
+  // Close Button (solid vector xmark)
   UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-  [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
-  [closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  closeBtn.titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightMedium];
+  UIImageSymbolConfiguration *closeConfig = [UIImageSymbolConfiguration configurationWithPointSize:17 weight:UIImageSymbolWeightBold];
+  UIImage *closeImg = [UIImage systemImageNamed:@"xmark" withConfiguration:closeConfig];
+  [closeBtn setImage:closeImg forState:UIControlStateNormal];
+  closeBtn.tintColor = [UIColor whiteColor];
   closeBtn.frame = CGRectMake(16, 5, 40, 40);
   closeBtn.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.4];
   closeBtn.layer.cornerRadius = 20;
   [closeBtn addTarget:self action:@selector(handleClose) forControlEvents:UIControlEventTouchUpInside];
   [topBar addSubview:closeBtn];
   
-  // Torch Button (moved to right side of top bar, orientation toggle moved to bottom)
+  // Torch Button (solid bolt icon)
   _torchButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  [_torchButton setTitle:@"⚡" forState:UIControlStateNormal];
-  [_torchButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  _torchButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightMedium];
+  UIImageSymbolConfiguration *torchConfig = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
+  UIImage *torchImg = [UIImage systemImageNamed:@"bolt.fill" withConfiguration:torchConfig];
+  [_torchButton setImage:torchImg forState:UIControlStateNormal];
+  _torchButton.tintColor = [UIColor whiteColor];
   _torchButton.frame = CGRectMake(self.view.bounds.size.width - 56, 5, 40, 40);
   _torchButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.4];
   _torchButton.layer.cornerRadius = 20;
@@ -266,7 +268,7 @@
   _instructionLabel.layer.masksToBounds = YES;
   _instructionLabel.translatesAutoresizingMaskIntoConstraints = NO;
   [bottomContainer addSubview:_instructionLabel];
-  
+
   // Status chips stack: [Card No] [Expiry] [CVV] [Name] [Bank]
   UIStackView *chipsStack = [[UIStackView alloc] init];
   chipsStack.axis = UILayoutConstraintAxisHorizontal;
@@ -287,7 +289,7 @@
   [chipsStack addArrangedSubview:_chipBank];
   [bottomContainer addSubview:chipsStack];
   
-  // Secondary controls row: [ 🔄 Retry ] and [ 🔄 Card: Horiz ]
+  // Secondary controls row: [ Retry ] and [ Card: Horizontal / Vertical ]
   UIStackView *secondaryRow = [[UIStackView alloc] init];
   secondaryRow.axis = UILayoutConstraintAxisHorizontal;
   secondaryRow.distribution = UIStackViewDistributionFillEqually;
@@ -295,8 +297,12 @@
   secondaryRow.translatesAutoresizingMaskIntoConstraints = NO;
 
   _retryButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  [_retryButton setTitle:@"🔄 Retry" forState:UIControlStateNormal];
+  UIImageSymbolConfiguration *retryConfig = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightSemibold];
+  UIImage *retryImg = [UIImage systemImageNamed:@"arrow.clockwise" withConfiguration:retryConfig];
+  [_retryButton setImage:retryImg forState:UIControlStateNormal];
+  [_retryButton setTitle:@" Retry" forState:UIControlStateNormal];
   [_retryButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _retryButton.tintColor = [UIColor whiteColor];
   _retryButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
   _retryButton.backgroundColor = [UIColor colorWithRed:55/255.0 green:65/255.0 blue:81/255.0 alpha:0.7];
   _retryButton.layer.cornerRadius = 18;
@@ -305,10 +311,14 @@
   [_retryButton addTarget:self action:@selector(handleRetry) forControlEvents:UIControlEventTouchUpInside];
   [secondaryRow addArrangedSubview:_retryButton];
 
-  // Orientation Toggle Button (at bottom panel)
+  // Orientation Toggle Button (at bottom panel - solid card icon)
   _orientationButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  [_orientationButton setTitle:@"🔄 Card: Horiz" forState:UIControlStateNormal];
+  UIImageSymbolConfiguration *cardConfig = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightSemibold];
+  UIImage *cardImg = [UIImage systemImageNamed:@"rectangle.fill" withConfiguration:cardConfig];
+  [_orientationButton setImage:cardImg forState:UIControlStateNormal];
+  [_orientationButton setTitle:@" Card: Horizontal" forState:UIControlStateNormal];
   [_orientationButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _orientationButton.tintColor = [UIColor whiteColor];
   _orientationButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
   _orientationButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.5];
   _orientationButton.layer.cornerRadius = 18;
@@ -339,7 +349,7 @@
     [_instructionLabel.centerXAnchor constraintEqualToAnchor:bottomContainer.centerXAnchor],
     [_instructionLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:bottomContainer.leadingAnchor constant:8],
     [_instructionLabel.trailingAnchor constraintLessThanOrEqualToAnchor:bottomContainer.trailingAnchor constant:-8],
-    [_instructionLabel.heightAnchor constraintEqualToConstant:44],
+    [_instructionLabel.heightAnchor constraintEqualToConstant:40],
     
     [chipsStack.topAnchor constraintEqualToAnchor:_instructionLabel.bottomAnchor constant:8],
     [chipsStack.leadingAnchor constraintEqualToAnchor:bottomContainer.leadingAnchor],
@@ -348,7 +358,7 @@
     
     [secondaryRow.topAnchor constraintEqualToAnchor:chipsStack.bottomAnchor constant:8],
     [secondaryRow.centerXAnchor constraintEqualToAnchor:bottomContainer.centerXAnchor],
-    [secondaryRow.widthAnchor constraintEqualToConstant:240],
+    [secondaryRow.widthAnchor constraintEqualToConstant:280],
     [secondaryRow.heightAnchor constraintEqualToConstant:36],
     
     [_proceedButton.topAnchor constraintEqualToAnchor:secondaryRow.bottomAnchor constant:8],
@@ -378,9 +388,7 @@
   
   // 1. Update Chips
   if (_detectedCardNumber.length > 0) {
-    NSString *clean = [[_detectedCardNumber componentsSeparatedByCharactersInSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]] componentsJoinedByString:@""];
-    NSString *last4 = clean.length >= 4 ? [clean substringFromIndex:clean.length - 4] : clean;
-    _chipNumber.text = [NSString stringWithFormat:@"✓ ••%@", last4];
+    _chipNumber.text = [NSString stringWithFormat:@"✓ %@", _detectedCardNumber];
     _chipNumber.textColor = [UIColor whiteColor];
     _chipNumber.backgroundColor = [UIColor colorWithRed:16/255.0 green:185/255.0 blue:129/255.0 alpha:1.0];
     _chipNumber.layer.borderColor = [UIColor colorWithRed:5/255.0 green:150/255.0 blue:105/255.0 alpha:1.0].CGColor;
@@ -401,8 +409,7 @@
   }
   
   if (_detectedOwnerName.length > 0) {
-    NSString *shortName = _detectedOwnerName.length > 9 ? [NSString stringWithFormat:@"%@…", [_detectedOwnerName substringToIndex:8]] : _detectedOwnerName;
-    _chipName.text = [NSString stringWithFormat:@"✓ %@", shortName];
+    _chipName.text = [NSString stringWithFormat:@"✓ %@", _detectedOwnerName];
     _chipName.textColor = [UIColor whiteColor];
     _chipName.backgroundColor = [UIColor colorWithRed:16/255.0 green:185/255.0 blue:129/255.0 alpha:1.0];
     _chipName.layer.borderColor = [UIColor colorWithRed:5/255.0 green:150/255.0 blue:105/255.0 alpha:1.0].CGColor;
@@ -438,7 +445,7 @@
   // 3. Update Proceed button
   if (_detectedCardNumber.length > 0) {
     _proceedButton.enabled = YES;
-    [_proceedButton setTitle:@"Proceed with Scanned Details →" forState:UIControlStateNormal];
+    [_proceedButton setTitle:@"Proceed with Scanned Details" forState:UIControlStateNormal];
     [_proceedButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     _proceedButton.backgroundColor = [UIColor colorWithRed:16/255.0 green:185/255.0 blue:129/255.0 alpha:1.0];
   }
@@ -505,11 +512,16 @@
   _isVerticalMode = !_isVerticalMode;
   [self updateOverlayLayout];
   
+  UIImageSymbolConfiguration *cardConfig = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightSemibold];
   if (_isVerticalMode) {
-    [_orientationButton setTitle:@"🔄 Card: Vert" forState:UIControlStateNormal];
+    UIImage *vertImg = [UIImage systemImageNamed:@"rectangle.portrait.fill" withConfiguration:cardConfig];
+    [_orientationButton setImage:vertImg forState:UIControlStateNormal];
+    [_orientationButton setTitle:@" Card: Vertical" forState:UIControlStateNormal];
     _instructionLabel.text = @"Position vertical card inside frame\nDetails are detected automatically";
   } else {
-    [_orientationButton setTitle:@"🔄 Card: Horiz" forState:UIControlStateNormal];
+    UIImage *horizImg = [UIImage systemImageNamed:@"rectangle.fill" withConfiguration:cardConfig];
+    [_orientationButton setImage:horizImg forState:UIControlStateNormal];
+    [_orientationButton setTitle:@" Card: Horizontal" forState:UIControlStateNormal];
     _instructionLabel.text = @"Position horizontal card inside frame\nDetails are detected automatically";
   }
 }
@@ -533,7 +545,7 @@
     _cameraDevice.torchMode = _isTorchOn ? AVCaptureTorchModeOn : AVCaptureTorchModeOff;
     [_cameraDevice unlockForConfiguration];
     
-    [_torchButton setTitleColor:_isTorchOn ? [UIColor colorWithRed:245/255.0 green:158/255.0 blue:11/255.0 alpha:1.0] : [UIColor whiteColor] forState:UIControlStateNormal];
+    _torchButton.tintColor = _isTorchOn ? [UIColor colorWithRed:245/255.0 green:158/255.0 blue:11/255.0 alpha:1.0] : [UIColor whiteColor];
   }
 }
 
