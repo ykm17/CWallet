@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +13,7 @@ import UnshareFromGroup from './screens/UnshareFromGroup';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
 import CustomAlertHost from './components/CustomAlert';
+import { hideCardOverlay } from './services/cardOverlayService';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -34,8 +35,16 @@ const App = () => {
       enableSecureView(); // Blocks screenshot and screen recording on iOS
     }
 
+    // When the user opens the app or returns to it, automatically close the overlay
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        hideCardOverlay();
+      }
+    });
+
     // Optional: Clean up by allowing screenshots on component unmount
     return () => {
+      appStateSub.remove();
       if (Platform.OS === 'android') {
         allowAndroidShare(); // Re-enables screenshot and sharing on Android
       } else if (Platform.OS === 'ios') {

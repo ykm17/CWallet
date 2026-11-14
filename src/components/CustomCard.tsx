@@ -9,6 +9,7 @@ import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
 import { deleteOwnedCard } from '../services/cardService'
+import { showCardOverlay } from '../services/cardOverlayService'
 
 interface CardProps {
   cardDetails: Card,
@@ -60,6 +61,11 @@ const CustomCard: React.FC<CardProps> = ({
     setTimeout(() => {
       setCopiedField(null);
     }, 2000);
+
+    // Show floating overlay with expiry and CVV and move app to background
+    showCardOverlay(cardDetails).catch((err) => {
+      console.warn('Could not launch card overlay:', err);
+    });
   };
 
   const copyWholeCard = () => {

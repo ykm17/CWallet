@@ -11,6 +11,14 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(null)
   }
+
+  override fun onResume() {
+    super.onResume()
+    // When the app is opened or brought back to foreground, automatically close the floating overlay
+    try {
+      stopService(android.content.Intent(this, CardOverlayService::class.java))
+    } catch (_: Exception) {}
+  }
   /**
    * Returns the name of the main component registered from JavaScript. This is used to schedule
    * rendering of the component.
