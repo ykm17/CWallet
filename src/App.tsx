@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Home from './screens/Home';
 import Login from './screens/Login';
+import Profile from './screens/Profile';
 import Groups from './screens/Groups';
 import GroupForm from './screens/GroupForm';
 import GroupDetails from './screens/GroupDetails';
@@ -18,6 +19,7 @@ import { hideCardOverlay } from './services/cardOverlayService';
 export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
+  Profile: undefined;
   Groups: undefined;
   GroupForm: { groupId?: string };
   GroupDetails: { groupId: string };
@@ -81,6 +83,7 @@ const App = () => {
               }}
             />
             <Stack.Screen name="Groups" component={Groups} />
+            <Stack.Screen name="Profile" component={Profile} options={{ title: 'Profile' }} />
             <Stack.Screen name="GroupForm" component={GroupForm} />
             <Stack.Screen name="GroupDetails" component={GroupDetails} />
             <Stack.Screen name="ShareToGroup" component={ShareToGroup} />

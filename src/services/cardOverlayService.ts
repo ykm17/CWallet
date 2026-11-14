@@ -1,9 +1,36 @@
 import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
+import EncryptedStorage from 'react-native-encrypted-storage';
 import { Alert } from '../components/CustomAlert';
 import { Card } from '../types/Types';
 import { APP_NAME, BANK_DICTIONARY } from '../constants/Constants';
 
 const { CardOverlayModule } = NativeModules;
+const OVERLAY_ENABLED_PREF_KEY = 'user_card_overlay_enabled_pref';
+
+/**
+ * Checks whether the user has enabled the floating card assistant overlay.
+ * Defaults to true.
+ */
+export const isOverlayFeatureEnabled = async (): Promise<boolean> => {
+  try {
+    const val = await EncryptedStorage.getItem(OVERLAY_ENABLED_PREF_KEY);
+    if (val === null) return true; // Default enabled
+    return val === 'true';
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Persists user preference to enable or disable the floating card assistant overlay.
+ */
+export const setOverlayFeatureEnabled = async (enabled: boolean): Promise<void> => {
+  try {
+    await EncryptedStorage.setItem(OVERLAY_ENABLED_PREF_KEY, enabled ? 'true' : 'false');
+  } catch (error) {
+    console.error('Failed to save overlay preference:', error);
+  }
+};
 
 export interface OverlayCardData {
   bankName: string;
@@ -113,6 +140,12 @@ export const requestAllAppPermissions = async (): Promise<{
  * Works on Android (floating draggable window over other apps) and iOS (system banner over other apps).
  */
 export const showCardOverlay = async (card: Card): Promise<boolean> => {
+  // If user disabled the floating card assistant overlay in Profile, skip
+  const isEnabled = await isOverlayFeatureEnabled();
+  if (!isEnabled) {
+    return false;
+  }
+
   if (!CardOverlayModule?.showCardOverlay) {
     return false;
   }

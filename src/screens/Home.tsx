@@ -552,7 +552,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
             </>
           ) : (
             <>
-              <View style={styles.topBarLeft}>
+              <TouchableOpacity
+                style={styles.topBarLeft}
+                onPress={() => navigation.navigate('Profile')}
+                activeOpacity={0.7}
+                accessibilityLabel="Open profile"
+              >
                 <View style={styles.topBarBrandBox}>
                   <Icon source="wallet" size={17} color="#FFFFFF" />
                 </View>
@@ -563,7 +568,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                     {isConnected ? 'Online' : 'Offline'}
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
               <View style={styles.topBarRight}>
                 <TouchableOpacity
                   style={styles.topBarGroupsBtn}
@@ -577,15 +582,6 @@ const Home: React.FC<Props> = ({ navigation }) => {
                       <Text style={styles.topBarGroupsBadgeText}>{groups.length}</Text>
                     </View>
                   )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.topBarLogoutBtn}
-                  onPress={handleLogoutPress}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel="Log out"
-                >
-                  <Icon source="logout" size={16} color="#DC2626" />
                 </TouchableOpacity>
               </View>
             </>
