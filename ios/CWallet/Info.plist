@@ -49,6 +49,8 @@
 	</dict>
 	<key>NSBiometricUsageDescription</key>
 	<string>We use biometrics to authenticate you for security purposes.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan your debit or credit card to automatically fill card details.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>We use Face ID to authenticate you for security purposes.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

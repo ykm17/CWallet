@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class CardOverlayPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return listOf(CardOverlayModule(reactContext))
+        return listOf(
+            CardOverlayModule(reactContext),
+            CardScannerModule(reactContext)
+        )
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

@@ -28,6 +28,7 @@ import { Card } from '../types/Types';
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { formatCardNumber, detectCardNetwork, detectCardType } from '../util/Utils';
 import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan, NfcScanStage } from '../util/NfcCardReader';
+import { scanPaymentCard } from '../services/cardScannerService';
 import { ConnectivityContext } from '../util/Connectivity';
 
 interface CardFormModalProps {
@@ -256,6 +257,48 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     }
   };
 
+  const handleCameraScan = async () => {
+    if (!isConnected) {
+      Alert.alert('Offline', 'You must be online to add or scan cards.');
+      return;
+    }
+    try {
+      const scannedData = await scanPaymentCard();
+      if (!scannedData || !scannedData.cardNumber) {
+        return;
+      }
+
+      const updated = {
+        ...cardRef.current,
+        number: scannedData.cardNumber,
+        ...(scannedData.month ? { month: scannedData.month } : {}),
+        ...(scannedData.year ? { year: scannedData.year } : {}),
+        ...(scannedData.ownerName ? { ownerName: scannedData.ownerName } : {}),
+        ...(scannedData.network ? { network: scannedData.network } : {}),
+        ...(scannedData.bankName ? { bankName: scannedData.bankName } : {}),
+        ...(scannedData.cardType ? { cardType: scannedData.cardType } : {}),
+        ...(scannedData.cvv ? { cvv: scannedData.cvv } : {}),
+      };
+
+      cardRef.current = updated;
+      setCard(updated);
+      setFormKey(k => k + 1);
+
+      // Set touched for populated fields
+      setTouched(prev => ({
+        ...prev,
+        number: true,
+        ...(scannedData.month ? { month: true } : {}),
+        ...(scannedData.year ? { year: true } : {}),
+        ...(scannedData.ownerName ? { ownerName: true } : {}),
+        ...(scannedData.bankName ? { bankName: true } : {}),
+        ...(scannedData.cvv ? { cvv: true } : {}),
+      }));
+    } catch (err) {
+      console.error('Camera scanning error:', err);
+    }
+  };
+
   const errors = useMemo(() => {
     const errs: Record<string, string> = {};
 
@@ -390,24 +433,54 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           )}
 
           {!isUpdate && (
-            <TouchableOpacity
-              style={[styles.nfcBannerButton, !isConnected && { opacity: 0.5 }]}
-              onPress={handleNfcScan}
-              disabled={!isConnected}
-              activeOpacity={0.8}
-            >
-              <View style={styles.nfcBannerIconWrap}>
-                <Icon source="nfc" size={20} color="#FFFFFF" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.nfcBannerTitle}>Tap & Scan with NFC</Text>
-                <Text style={styles.nfcBannerSubtitle}>Scan your physical contactless card</Text>
-              </View>
-              <View style={styles.nfcBannerBadge}>
-                <Text style={styles.nfcBannerBadgeText}>Quick fill</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.quickFillContainer}>
+              <TouchableOpacity
+                style={[styles.quickFillButton, !isConnected && { opacity: 0.5 }]}
+                onPress={handleCameraScan}
+                disabled={!isConnected}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.quickFillIconWrap, { backgroundColor: '#111111' }]}>
+                  <Icon source="camera-outline" size={20} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.quickFillHeader}>
+                    <Text style={styles.quickFillTitle}>Scan Card</Text>
+                    <View style={styles.instantBadge}>
+                      <Text style={styles.instantBadgeText}>Live OCR</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.quickFillSubtitle}>Auto-detect using camera</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickFillButton, !isConnected && { opacity: 0.5 }]}
+                onPress={handleNfcScan}
+                disabled={!isConnected}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.quickFillIconWrap, { backgroundColor: '#1E293B' }]}>
+                  <Icon source="nfc" size={20} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.quickFillHeader}>
+                    <Text style={styles.quickFillTitle}>Tap with NFC</Text>
+                    <View style={styles.nfcBadge}>
+                      <Text style={styles.nfcBadgeText}>Contactless</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.quickFillSubtitle}>Scan your physical card</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           )}
+
+          {/* Section 1: Card Information */}
+          <View style={styles.sectionHeaderRow}>
+            <Icon source="credit-card-outline" size={15} color="#6B7280" />
+            <Text style={styles.sectionHeaderText}>CARD INFORMATION</Text>
+          </View>
 
           {/* Bank Selector Field */}
           <View style={styles.formSection}>
@@ -593,6 +666,12 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             </HelperText>
           )}
 
+          {/* Section 2: Card Expiry & Security */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 16 }]}>
+            <Icon source="shield-lock-outline" size={15} color="#6B7280" />
+            <Text style={styles.sectionHeaderText}>CARD EXPIRY & SECURITY</Text>
+          </View>
+
           {/* Expiry Month and Year */}
           <View style={styles.row}>
             <View style={styles.halfWidth}>
@@ -688,6 +767,12 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             </HelperText>
           )}
 
+          {/* Section 3: Additional Details */}
+          <View style={[styles.sectionHeaderRow, { marginTop: 16 }]}>
+            <Icon source="tag-outline" size={15} color="#6B7280" />
+            <Text style={styles.sectionHeaderText}>ADDITIONAL DETAILS</Text>
+          </View>
+
           {/* Card Nickname */}
           <TextInput
             key={`name-${formKey}`}
@@ -750,21 +835,45 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             </HelperText>
           )}
 
-          <Button
-            icon={isUpdate ? 'check-circle-outline' : 'plus-circle-outline'}
-            mode="contained"
-            onPress={handleFormSubmit}
-            disabled={!isFormValid || submitting || !isConnected}
-            loading={submitting}
-            style={[styles.button, isFormValid && !submitting && isConnected && styles.buttonActive]}
-            labelStyle={styles.buttonLabel}
-          >
-            {!isConnected
-              ? 'Offline (Cannot save)'
-              : isUpdate
-              ? 'Update Card'
-              : 'Save Card'}
-          </Button>
+          {/* Action Buttons: Cancel and Save Card */}
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={onDismiss}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                isFormValid && !submitting && isConnected && styles.saveBtnActive,
+              ]}
+              onPress={handleFormSubmit}
+              disabled={!isFormValid || submitting || !isConnected}
+              activeOpacity={0.8}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Icon
+                    source={isUpdate ? 'check-circle-outline' : 'plus-circle-outline'}
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.saveBtnText}>
+                    {!isConnected
+                      ? 'Offline'
+                      : isUpdate
+                      ? 'Update Card'
+                      : 'Save Card'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </Modal>
 
@@ -1070,6 +1179,131 @@ const styles = StyleSheet.create({
   },
   halfWidth: {
     flex: 1,
+  },
+  quickFillContainer: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  quickFillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  quickFillIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickFillHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  quickFillTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  quickFillSubtitle: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  instantBadge: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  instantBadgeText: {
+    color: '#B45309',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  nfcBadge: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  nfcBadgeText: {
+    color: '#065F46',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  sectionHeaderText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 0.6,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    color: '#4B5563',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  saveBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#9CA3AF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  saveBtnActive: {
+    backgroundColor: '#111111',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
   nfcBannerButton: {
     flexDirection: 'row',

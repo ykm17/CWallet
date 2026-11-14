@@ -131,6 +131,17 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // CameraX for Live Card Scanner (1.4.1+ is 16 KB page-size compliant, fixing libimage_processing_util_jni.so alignment)
+    def camerax_version = "1.4.1"
+    implementation "androidx.camera:camera-core:${camerax_version}"
+    implementation "androidx.camera:camera-camera2:${camerax_version}"
+    implementation "androidx.camera:camera-lifecycle:${camerax_version}"
+    implementation "androidx.camera:camera-view:${camerax_version}"
+    implementation "com.google.guava:guava:31.1-android"
+
+    // Google Play Services ML Kit Text Recognition (19.0.2+ is 16 KB page-size compliant)
+    implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.2'
 }
 
 task syncAppName {
