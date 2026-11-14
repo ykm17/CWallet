@@ -10,7 +10,7 @@ import { activatePendingMembershipsForUser } from '../services/groupService'
 import { Text, Snackbar, Icon } from 'react-native-paper'
 import { checkBiometricAvailability, authenticateWithBiometrics } from '../util/Biometric'
 import { ConnectivityContext } from '../util/Connectivity'
-import { WEB_CLIENT_ID } from '../constants/Constants'
+import { APP_NAME, WEB_CLIENT_ID } from '../constants/Constants'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>
 
@@ -131,7 +131,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
                     await auth().signOut()
                     await GoogleSignin.signOut()
                     setIsAlreadyLoggedIn(false)
-                    setErrorMessage('You do not have access to CWallet.')
+                    setErrorMessage(`You do not have access to ${APP_NAME}.`)
                     setVisible(true)
                 }
             }
@@ -149,8 +149,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>CWallet</Text>
-            <Text style={styles.description}>Welcome to CWallet{'\n'}Best digital wallet you can keep!</Text>
+            <Text style={styles.title}>{APP_NAME}</Text>
+            <Text style={styles.description}>Welcome to {APP_NAME}{'\n'}Best digital wallet you can keep!</Text>
 
             {checkingAuth ? (
                 <ActivityIndicator size="large" color="#4285F4" style={styles.loader} />

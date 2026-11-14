@@ -13,6 +13,7 @@ import CustomCard from '../components/CustomCard';
 import { contributionLabel, sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
 import { useUserGroups } from '../hooks/useUserGroups';
 import { ConnectivityContext } from '../util/Connectivity';
+import { APP_NAME } from '../constants/Constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GroupDetails'>;
 
@@ -152,7 +153,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       if (result.isPending) {
         Alert.alert(
           'Invitation Added',
-          `${result.email} was added as a pending member. Once they sign in to CWallet, their access will activate automatically.`,
+          `${result.email} was added as a pending member. Once they sign in to ${APP_NAME}, their access will activate automatically.`,
         );
       } else {
         Alert.alert(
@@ -258,7 +259,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
         </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.memberName}>{item.displayName || 'CWallet user'}</Text>
+            <Text style={styles.memberName}>{item.displayName || `${APP_NAME} user`}</Text>
             {isCurrentUser && (
               <View style={styles.youBadge}>
                 <Text style={styles.youBadgeText}>You</Text>
@@ -446,7 +447,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
               <View style={styles.addMemberBox}>
                 <Text style={styles.addMemberTitle}>Add member</Text>
                 <Text style={styles.addMemberHelp}>
-                  Use the email on their CWallet account, or their Apple user identifier for iOS Apple accounts.
+                  Use the email on their {APP_NAME} account, or their Apple user identifier for iOS Apple accounts.
                 </Text>
                 <View style={styles.addRow}>
                   <RNTextInput

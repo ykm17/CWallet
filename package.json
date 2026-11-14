@@ -3,11 +3,13 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "node scripts/sync-app-name.js && react-native run-android",
+    "ios": "node scripts/sync-app-name.js && react-native run-ios",
     "lint": "eslint .",
-    "start": "react-native start",
-    "test": "jest"
+    "start": "node scripts/sync-app-name.js && react-native start",
+    "test": "jest",
+    "sync-app-name": "node scripts/sync-app-name.js",
+    "postinstall": "node scripts/sync-app-name.js"
   },
   "dependencies": {
     "@react-native-clipboard/clipboard": "^1.14.2",

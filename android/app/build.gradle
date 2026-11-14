@@ -132,3 +132,23 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+task syncAppName {
+    doLast {
+        def appJsonFile = file("../../app.json")
+        if (appJsonFile.exists()) {
+            def appJson = new groovy.json.JsonSlurper().parseText(appJsonFile.text)
+            def appDisplayName = appJson.displayName ?: appJson.name
+            def stringsFile = file("src/main/res/values/strings.xml")
+            if (stringsFile.exists() && appDisplayName) {
+                def content = stringsFile.text
+                def updated = content.replaceAll(/<string name="app_name">.*?<\/string>/, "<string name=\"app_name\">${appDisplayName}</string>")
+                if (content != updated) {
+                    stringsFile.text = updated
+                    println "[Gradle syncAppName] Updated strings.xml to: ${appDisplayName}"
+                }
+            }
+        }
+    }
+}
+preBuild.dependsOn syncAppName

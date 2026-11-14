@@ -1,4 +1,5 @@
 import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
+import { APP_NAME } from '../constants/Constants';
 
 const rnBiometrics = new ReactNativeBiometrics();
 
@@ -16,7 +17,7 @@ export const checkBiometricAvailability = async (): Promise<boolean> => {
 export const authenticateWithBiometrics = async (): Promise<boolean> => {
     try {
         const { success } = await rnBiometrics.simplePrompt({
-            promptMessage: 'Authenticate to access CWallet',
+            promptMessage: `Authenticate to access ${APP_NAME}`,
             cancelButtonText: 'Cancel'
         });
         console.log('Biometric authentication result:', success);

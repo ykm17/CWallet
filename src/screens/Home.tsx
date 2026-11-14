@@ -13,7 +13,7 @@ import auth from '@react-native-firebase/auth';
 import { Card } from '../types/Types';
 import { FAB, Text, SegmentedButtons, Searchbar, Icon, Dialog, Portal } from 'react-native-paper';
 import { isEmpty } from 'lodash';
-import { BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
+import { APP_NAME, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp, getDocs } from '@react-native-firebase/firestore';
 import { encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
@@ -453,7 +453,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.confirmDialogTitle}>Log Out</Text>
               </View>
               <Text style={styles.confirmDialogMessage}>
-                Are you sure you want to log out of CWallet? You will need to sign in again to access your cards.
+                Are you sure you want to log out of {APP_NAME}? You will need to sign in again to access your cards.
               </Text>
               <View style={styles.confirmDialogActions}>
                 <TouchableOpacity
@@ -487,7 +487,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 <View style={[styles.confirmIconContainer, { backgroundColor: '#F3F4F6' }]}>
                   <Icon source="power" size={20} color="#111111" />
                 </View>
-                <Text style={styles.confirmDialogTitle}>Exit CWallet</Text>
+                <Text style={styles.confirmDialogTitle}>Exit {APP_NAME}</Text>
               </View>
               <Text style={styles.confirmDialogMessage}>
                 Are you sure you want to exit the application?
@@ -555,7 +555,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.topBarBrandBox}>
                   <Icon source="wallet" size={17} color="#FFFFFF" />
                 </View>
-                <Text style={styles.topBarBrandTitle}>CWallet</Text>
+                <Text style={styles.topBarBrandTitle}>{APP_NAME}</Text>
                 <View style={[styles.topBarStatusPill, isConnected ? styles.topBarStatusOnline : styles.topBarStatusOffline]}>
                   <View style={[styles.topBarStatusDot, isConnected ? styles.topBarStatusDotOnline : styles.topBarStatusDotOffline]} />
                   <Text style={[styles.topBarStatusText, isConnected ? styles.topBarStatusTextOnline : styles.topBarStatusTextOffline]}>

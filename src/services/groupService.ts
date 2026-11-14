@@ -19,6 +19,7 @@ import { COLLECTIONS, CONTRIBUTION, MEMBER_ROLE, MEMBER_STATUS } from '../consta
 import { ContributionPermission, Group, GroupMember, WalletUser } from '../types/Types';
 import { chunkForBatch, normalizeEmail } from './sharingUtils';
 import { findRegisteredUser, findUserByEmail, hasAccessListEntry, isValidEmail } from './userService';
+import { APP_NAME } from '../constants/Constants';
 
 const db = () => getFirestore();
 
@@ -192,7 +193,7 @@ export const addMemberToGroup = async (groupId: string, identifier: string): Pro
     return { isPending: true, email: normalizedEmail };
   }
 
-  throw new Error('No CWallet account was found for that Apple ID.');
+  throw new Error(`No ${APP_NAME} account was found for that Apple ID.`);
 };
 
 export const activatePendingMembershipsForUser = async (): Promise<number> => {

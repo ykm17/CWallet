@@ -1,4 +1,7 @@
 import { BankDictionary } from "../types/Types";
+import appConfig from "../../app.json";
+
+export const APP_NAME: string = appConfig.displayName || appConfig.name || "EWallet";
 
 export const WEB_CLIENT_ID: string = '566381520762-men69odgck2o91alaa6fm6stubjpr1ng.apps.googleusercontent.com';
 
