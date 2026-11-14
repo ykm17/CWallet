@@ -14,6 +14,16 @@ export const checkBiometricAvailability = async (): Promise<boolean> => {
     }
 };
 
+export const getBiometricDetails = async (): Promise<{ available: boolean; biometryType?: string }> => {
+    try {
+        const { available, biometryType } = await rnBiometrics.isSensorAvailable();
+        return { available, biometryType };
+    } catch (error) {
+        console.error('Error fetching biometric details:', error);
+        return { available: false };
+    }
+};
+
 export const authenticateWithBiometrics = async (): Promise<boolean> => {
     try {
         const { success } = await rnBiometrics.simplePrompt({

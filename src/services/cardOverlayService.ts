@@ -1,7 +1,7 @@
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { Card } from '../types/Types';
-import { BANK_DICTIONARY } from '../constants/Constants';
+import { APP_NAME, BANK_DICTIONARY } from '../constants/Constants';
 
 const { CardOverlayModule } = NativeModules;
 
@@ -29,12 +29,82 @@ export const canDrawOverlays = async (): Promise<boolean> => {
 };
 
 /**
- * Opens system settings to request overlay permission on Android.
+ * Opens system settings to request overlay permission on Android,
+ * or requests notification authorization on iOS.
  */
 export const requestOverlayPermission = (): void => {
   if (CardOverlayModule?.requestOverlayPermission) {
     CardOverlayModule.requestOverlayPermission();
   }
+};
+
+/**
+ * Checks current permission status without prompting.
+ */
+export const checkAppPermissionsStatus = async (): Promise<{
+  overlayGranted: boolean;
+  notificationsGranted: boolean;
+}> => {
+  let overlayGranted = true;
+  let notificationsGranted = true;
+
+  if (Platform.OS === 'android') {
+    overlayGranted = await canDrawOverlays();
+    if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
+      try {
+        notificationsGranted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+      } catch {
+        notificationsGranted = false;
+      }
+    }
+  }
+
+  return { overlayGranted, notificationsGranted };
+};
+
+/**
+ * Requests all required system permissions for the card assistant (overlay and notifications).
+ */
+export const requestAllAppPermissions = async (): Promise<{
+  overlayGranted: boolean;
+  notificationsGranted: boolean;
+}> => {
+  let notificationsGranted = true;
+  let overlayGranted = true;
+
+  if (Platform.OS === 'android') {
+    // 1. Android 13+ Notification Permission
+    if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
+      try {
+        const res = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          {
+            title: 'Notification Permission',
+            message: `${APP_NAME} needs notification access to show your card assistant during payments.`,
+            buttonPositive: 'Allow',
+          }
+        );
+        notificationsGranted = res === PermissionsAndroid.RESULTS.GRANTED;
+      } catch {
+        notificationsGranted = false;
+      }
+    }
+
+    // 2. Android Overlay Permission ("Display over other apps")
+    overlayGranted = await canDrawOverlays();
+    if (!overlayGranted) {
+      requestOverlayPermission();
+    }
+  } else if (Platform.OS === 'ios') {
+    // iOS Notification Permission (Alert, Sound, Badge)
+    requestOverlayPermission();
+    overlayGranted = true;
+    notificationsGranted = true;
+  }
+
+  return { overlayGranted, notificationsGranted };
 };
 
 /**
