@@ -1,4 +1,4 @@
-import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator } from 'react-native'
+import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator, Platform } from 'react-native'
 import React, { useContext, useState, useRef } from 'react'
 import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
@@ -176,154 +176,153 @@ const CustomCard: React.FC<CardProps> = ({
         { backgroundColor: BANK_COLORS[cardDetails.bankName] || '#1B1B1B' },
         isSelected && styles.selectedContainer,
       ]}>
-        {/* Row 1: Card Owner & Limit (Left) & Edit/Delete Buttons (Top Right) */}
-        <View style={styles.spaceContainer}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.heading_1} numberOfLines={1}>
-              {limitFormatted ? 'OWNER | LIMIT' : 'CARD OWNER'}
+        {/* Subtle Ambient Sheen Highlights for physical depth & glow */}
+        <View pointerEvents="none" style={styles.cardSheenTop} />
+        <View pointerEvents="none" style={styles.cardSheenBottom} />
+
+        {/* Row 1: Bank Name & Brand / Tier Tags (Left) + Action Pill (Right) */}
+        <View style={styles.headerRow}>
+          <View style={styles.bankInfoContainer}>
+            <Text style={styles.bankNameText} numberOfLines={1}>
+              {BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName || 'BANK CARD'}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 1 }}>
-              <Text
-                style={styles.subheading_1}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.75}
-              >
-                {cardDetails.ownerName}
-                {limitFormatted ? ` | ${limitFormatted}` : ''}
-              </Text>
+            <View style={styles.badgeRow}>
+              {showYourCardLabel && isOwner ? (
+                <View style={styles.yourCardBadge}>
+                  <Text style={styles.yourCardText}>YOUR CARD</Text>
+                </View>
+              ) : null}
+              {cardDetails.name ? (
+                <View style={styles.cardTierBadge}>
+                  <Text style={styles.cardTierText} numberOfLines={1}>{cardDetails.name}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
 
-          {isConnected && isOwner && !selectionMode && (
-            <View style={styles.topRightActions}>
+          {isConnected && isOwner && !selectionMode ? (
+            <View style={styles.actionPill}>
               {onShare && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={() => onShare(cardDetails)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
-                  <Icon source="share-variant" color="white" size={18} />
+                  <Icon source="share-variant" color="#FFFFFF" size={14} />
                 </TouchableOpacity>
               )}
               {onUnshare && totalSharedCount > 0 && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={() => onUnshare(cardDetails)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
-                  <Icon source="share-off" color="white" size={18} />
+                  <Icon source="share-off" color="#FFFFFF" size={14} />
                 </TouchableOpacity>
               )}
               {onCardEdit && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={handleEdit}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
-                  <Icon source="pencil" color="white" size={18} />
+                  <Icon source="pencil" color="#FFFFFF" size={14} />
                 </TouchableOpacity>
               )}
               {onCardEdit && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={showDialog}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
-                  <Icon source="delete-outline" color="white" size={18} />
+                  <Icon source="delete-outline" color="#FFFFFF" size={14} />
                 </TouchableOpacity>
               )}
             </View>
-          )}
-          {selectionMode && (
-            <Icon
-              source={isSelected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
-              color="white"
-              size={22}
-            />
-          )}
-
-        </View>
-
-        {/* Row 2 (Vertically Center): Card Number (Left) & Chip Icon (Vertically Centered on Right) */}
-        <View style={[styles.spaceContainer, { alignItems: 'center' }]}>
-          <View style={styles.cardNumberSection}>
-            <Text style={styles.heading_1}>CARD NUMBER</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <TouchableWithoutFeedback onLongPress={copyNumber}>
-                <Text style={styles.subheading_2}>{cardDetails.number}</Text>
-              </TouchableWithoutFeedback>
-              <TouchableOpacity
-                style={[styles.copyNumberBtn, copiedField === 'number' && styles.copyBtnActive]}
-                onPress={copyNumber}
-                activeOpacity={0.7}
-              >
-                <Icon
-                  source={copiedField === 'number' ? 'check' : 'content-copy'}
-                  color="white"
-                  size={10}
-                />
-                <Text style={styles.copyBtnText}>
-                  {copiedField === 'number' ? 'Copied' : 'Copy'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <TouchableWithoutFeedback onLongPress={copyWholeCard}>
-            <View style={styles.centerChipContainer}>
+          ) : selectionMode ? (
+            <View style={styles.selectionCheckWrap}>
               <Icon
-                source="credit-card-chip"
-                color="white"
-                size={34}
+                source={isSelected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+                color="#FFFFFF"
+                size={22}
               />
             </View>
-          </TouchableWithoutFeedback>
+          ) : null}
         </View>
 
-        {/* Row 3: Expiry & CVV + Card Name (Left), Bank Name + Network/Card Type in Italic (Right) */}
-        <View style={[styles.spaceContainer, { marginTop: 4 }]}>
-          <View style={{ justifyContent: 'flex-end', flex: 1, paddingRight: 6 }}>
-            <Text style={styles.heading_1}>EXPIRY & CVV</Text>
-            <Text style={styles.subheading_2}>
-              {cardDetails.month}/{cardDetails.year}     {cardDetails.cvv}
-            </Text>
-
-            <View style={styles.labelRow}>
-              {showYourCardLabel && isOwner ? (
-                <View style={styles.yourCardContainer}>
-                  <Text style={styles.yourCardText}>Your Card</Text>
-                </View>
-              ) : null}
-              {cardDetails.name ? (
-                <View style={styles.cardNameContainer}>
-                  <Text style={styles.cardNameText}>{cardDetails.name}</Text>
-                </View>
-              ) : null}
+        {/* Row 2: EMV Chip & Contactless wave (Left) + Optional Card Limit (Right) */}
+        <View style={styles.chipRow}>
+          <View style={styles.chipAndWaveContainer}>
+            <View style={styles.chipWrapper}>
+              <Icon source="credit-card-chip" color="rgba(255, 255, 255, 0.9)" size={20} />
+            </View>
+            <View style={styles.contactlessWrapper}>
+              <Icon source="contactless-payment" color="rgba(255, 255, 255, 0.75)" size={16} />
             </View>
           </View>
 
-          <View style={{ alignItems: 'flex-end', justifyContent: 'flex-end', flex: 1, paddingLeft: 6 }}>
-            <Text style={[styles.heading_1, { alignSelf: 'flex-end' }]}>BANK NAME</Text>
-            <Text
-              style={[styles.subheading_2, styles.bankNameText]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-            >
-              {BANK_DICTIONARY[cardDetails.bankName]}
-            </Text>
-            {badgeLabel ? (
-              <View style={styles.networkTagContainer}>
-                <Text style={styles.networkTagText}>{badgeLabel}</Text>
-              </View>
-            ) : null}
-          </View>
+          {limitFormatted ? (
+            <View style={styles.limitContainer}>
+              <Text style={styles.cardMicroLabel}>LIMIT</Text>
+              <Text style={styles.limitValueText}>{limitFormatted}</Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Bottom Row: Shared status or via group/person on left, Copy Card on right (same line) */}
-        <View style={[styles.cardBottomRow, !hasLeftElement && { justifyContent: 'center' }]}>
-          {hasLeftElement && (
+        {/* Row 3: Card Number with Quick Copy Pill */}
+        <View style={styles.cardNumberRow}>
+          <TouchableWithoutFeedback onLongPress={copyNumber}>
+            <Text style={styles.cardNumberText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {cardDetails.number}
+            </Text>
+          </TouchableWithoutFeedback>
+          <TouchableOpacity
+            style={[styles.copyNumberBtn, copiedField === 'number' && styles.copyBtnActive]}
+            onPress={copyNumber}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source={copiedField === 'number' ? 'check' : 'content-copy'}
+              color="#FFFFFF"
+              size={10}
+            />
+            <Text style={styles.copyBtnText}>
+              {copiedField === 'number' ? 'Copied' : 'Copy'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 4: Cardholder Name (Left), Expiry & CVV (Center), Network Tag (Right) */}
+        <View style={styles.detailsRow}>
+          <View style={styles.cardholderSection}>
+            <Text style={styles.cardMicroLabel}>CARDHOLDER</Text>
+            <Text style={styles.cardholderText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {cardDetails.ownerName}
+            </Text>
+          </View>
+
+          <View style={styles.expiryCvvSection}>
+            <View style={styles.expiryCol}>
+              <Text style={styles.cardMicroLabel}>EXPIRES</Text>
+              <Text style={styles.cardDetailValText}>{cardDetails.month}/{cardDetails.year}</Text>
+            </View>
+            <View style={styles.cvvCol}>
+              <Text style={styles.cardMicroLabel}>CVV</Text>
+              <Text style={styles.cardDetailValText}>{cardDetails.cvv}</Text>
+            </View>
+          </View>
+
+          {badgeLabel ? (
+            <View style={styles.networkTagContainer}>
+              <Text style={styles.networkTagText}>{badgeLabel}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Footer Row: Shared status or via group on left, Copy Whole Card on right */}
+        <View style={styles.cardFooterDivider} />
+        <View style={styles.cardBottomRow}>
+          {hasLeftElement ? (
             isOwner ? (
               <TouchableOpacity
                 style={styles.sharedBadgeBtn}
@@ -331,7 +330,7 @@ const CustomCard: React.FC<CardProps> = ({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Icon source="share-variant" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Icon source="account-group" size={11.5} color="rgba(255, 255, 255, 0.9)" />
                 <Text style={styles.sharedBadgeText}>Shared ({totalSharedCount})</Text>
               </TouchableOpacity>
             ) : (
@@ -341,12 +340,14 @@ const CustomCard: React.FC<CardProps> = ({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Icon source="share-variant" size={12} color="rgba(255, 255, 255, 0.85)" />
+                <Icon source="share-variant" size={11} color="rgba(255, 255, 255, 0.9)" />
                 <Text style={styles.accessGroupsText} numberOfLines={1}>
                   {recipientAccessLabel}
                 </Text>
               </TouchableOpacity>
             )
+          ) : (
+            <View style={{ flex: 1 }} />
           )}
 
           <TouchableOpacity
@@ -359,8 +360,8 @@ const CustomCard: React.FC<CardProps> = ({
           >
             <Icon
               source={copiedField === 'card' ? 'check' : 'content-copy'}
-              color="white"
-              size={11}
+              color="#FFFFFF"
+              size={10}
             />
             <Text style={styles.copyBtnText}>
               {copiedField === 'card' ? 'Copied' : 'Copy Card'}
@@ -524,50 +525,282 @@ export default CustomCard
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#1B1B1B',
-    padding: 16,
-    marginTop: 12,
-    marginStart: 12,
-    marginEnd: 12,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginTop: 10,
+    marginHorizontal: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   selectedContainer: {
     borderWidth: 2,
     borderColor: '#FFFFFF',
+    shadowOpacity: 0.35,
   },
-  labelRow: {
+  cardSheenTop: {
+    position: 'absolute',
+    top: -50,
+    right: -25,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  cardSheenBottom: {
+    position: 'absolute',
+    bottom: -60,
+    left: -30,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(0, 0, 0, 0.14)',
+  },
+  headerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
-  yourCardContainer: {
+  bankInfoContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  bankNameText: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2.5,
+  },
+  yourCardBadge: {
     backgroundColor: '#FACC15',
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
     alignSelf: 'flex-start',
   },
   yourCardText: {
     color: '#111111',
     fontWeight: '800',
-    fontSize: 9,
+    fontSize: 8,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
+  },
+  cardTierBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    alignSelf: 'flex-start',
+    maxWidth: 140,
+  },
+  cardTierText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 16,
+    paddingHorizontal: 5,
+    paddingVertical: 2.5,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  actionIconBtn: {
+    padding: 2.5,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectionCheckWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 2,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  chipAndWaveContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chipWrapper: {
+    width: 26,
+    height: 18,
+    borderRadius: 3.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactlessWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  limitContainer: {
+    alignItems: 'flex-end',
+  },
+  limitValueText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  cardNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardNumberText: {
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 1.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    flex: 1,
+  },
+  copyNumberBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 4,
+    marginStart: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  copyCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  copyBtnActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.38)',
+  },
+  copyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+    marginStart: 3,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  cardholderSection: {
+    flex: 1.4,
+    marginRight: 6,
+  },
+  cardMicroLabel: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 1,
+    textTransform: 'uppercase',
+  },
+  cardholderText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  expiryCvvSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  expiryCol: {
+    alignItems: 'flex-start',
+  },
+  cvvCol: {
+    alignItems: 'flex-start',
+  },
+  cardDetailValText: {
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  networkTagContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-end',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  networkTagText: {
+    color: '#FFFFFF',
+    fontSize: 8.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  cardFooterDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    marginVertical: 6,
+    marginHorizontal: -3,
   },
   cardBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
   },
   sharedBadgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 10,
   },
   sharedBadgeText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
@@ -575,132 +808,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 10,
     flex: 1,
-    marginRight: 8,
+    marginRight: 6,
   },
   accessGroupsText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
-  heading_1: {
-    alignSelf: 'flex-start',
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 9,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-  },
-  heading_2: {
-    alignSelf: 'flex-end',
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 9,
-    letterSpacing: 0.5,
-  },
-  subheading_1: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  subheading_2: {
-    color: '#ffffff',
-    fontSize: 15,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-  },
-  bankNameText: {
-    marginBottom: 4,
-    textAlign: 'right',
-    maxWidth: '100%',
-  },
-  spaceContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-    flex: 1,
-  },
-  cardNumberSection: {
-    marginBottom: 0,
-    marginTop: 6,
-    flex: 1,
-  },
-  topRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  actionIconBtn: {
-    padding: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centerChipContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginStart: 8,
-  },
-  copyNumberBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginStart: 6,
-  },
-
-  copyCardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  copyBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.38)',
-  },
-  copyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 9.5,
-    fontWeight: '600',
-    marginStart: 3,
-  },
-  cardNameContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  cardNameText: {
-    color: '#000000',
-    fontWeight: '800',
-    fontSize: 9,
-    textTransform: 'uppercase',
-  },
-  networkTagContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-    alignSelf: 'flex-end',
-    marginTop: 4,
-  },
-  networkTagText: {
-    color: '#FFFFFF',
-    fontSize: 9.5,
-    fontStyle: 'italic',
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
   deleteDialog: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     marginHorizontal: 20,
   },
   deleteDialogBody: {
@@ -710,54 +835,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   deleteDialogTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: '#111827',
   },
   deleteDialogMessage: {
-    fontSize: 13,
-    color: '#666666',
+    fontSize: 13.5,
+    color: '#6B7280',
     textAlign: 'left',
-    lineHeight: 18,
-    marginBottom: 14,
+    lineHeight: 19,
+    marginBottom: 16,
   },
   deleteCardPreview: {
     width: '100%',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   deleteCardPreviewHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   deleteCardPreviewBank: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     flex: 1,
+    textTransform: 'uppercase',
   },
   deleteCardPreviewBadge: {
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 10,
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
   deleteCardPreviewNumber: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 1.2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 6,
   },
   deleteCardPreviewOwner: {
     color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   deleteDialogActions: {
     flexDirection: 'row',
@@ -767,25 +897,25 @@ const styles = StyleSheet.create({
   cancelBtn: {
     flex: 1,
     backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtnText: {
-    color: '#4B5563',
+    color: '#374151',
     fontWeight: '600',
     fontSize: 14,
   },
   confirmDeleteBtn: {
     flex: 1,
-    backgroundColor: '#D32F2F',
-    borderRadius: 8,
-    paddingVertical: 10,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 4,
+    gap: 5,
   },
   confirmDeleteBtnText: {
     color: '#FFFFFF',
@@ -794,10 +924,10 @@ const styles = StyleSheet.create({
   },
   groupsDialog: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    marginHorizontal: 24,
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    marginHorizontal: 20,
   },
   groupsDialogBody: {
     width: '100%',
@@ -806,12 +936,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   groupsDialogIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
@@ -819,7 +949,7 @@ const styles = StyleSheet.create({
   groupsDialogTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111111',
+    color: '#111827',
   },
   groupsDialogSubtitle: {
     fontSize: 12,
@@ -827,7 +957,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   groupsDialogMessage: {
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#4B5563',
     lineHeight: 18,
     marginBottom: 12,
@@ -842,30 +972,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
     gap: 10,
   },
   groupItemIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#111111',
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
   },
   groupItemText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#111827',
     flex: 1,
   },
   groupsDialogCloseBtn: {
-    backgroundColor: '#111111',
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: '#111827',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
