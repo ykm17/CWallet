@@ -123,12 +123,12 @@ class CardOverlayService : Service() {
         val title = when {
             bankName.isNotEmpty() -> bankName
             cardName.isNotEmpty() -> cardName
-            else -> "Card Assistant"
+            else -> "EWallet"
         }
         val content = if (cardNumber.isNotEmpty()) {
-            "$cardNumber  |  EXP: $expiry  |  CVV: $cvv"
+            "$cardNumber  |  EXP: ${expiry.ifEmpty { "--/--" }}  |  CVV: ${cvv.ifEmpty { "---" }}"
         } else {
-            "Expiry: $expiry  |  CVV: $cvv"
+            "EXP: ${expiry.ifEmpty { "--/--" }}  |  CVV: ${cvv.ifEmpty { "---" }}"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -183,39 +183,44 @@ class CardOverlayService : Service() {
             y = dp(140f)
         }
 
-        // Main root container
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+        // Main root container: sleek, compact floating card matching CWallet app UI
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14f), dp(10f), dp(14f), dp(12f))
-            elevation = dp(12f).toFloat()
+            setPadding(dp(10f), dp(8f), dp(10f), dp(8f))
+            elevation = dp(8f).toFloat()
 
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#18181B")) // Dark matte background
-                cornerRadius = dp(14f).toFloat()
-                setStroke(dp(1.5f), Color.parseColor("#3F3F46")) // Subtle border
+                setColor(Color.parseColor("#111827")) // Obsidian theme
+                cornerRadius = dp(12f).toFloat()
+                setStroke(dp(1f), Color.parseColor("#374151")) // Refined border
             }
         }
 
-        // Top row: [App badge] [Card/Bank info] [✕ Close button]
+        // Top row: [App badge "EWallet"] [Bank info] [Spacer] [Close ✕]
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+            ).apply {
+                setMargins(0, 0, 0, dp(6f))
+            }
         }
 
-        // Mini app badge (clicking opens the app and closes overlay)
+        // App badge ("EWallet" like before)
         val badge = TextView(this).apply {
             text = "EWallet"
-            setTextColor(Color.parseColor("#F59E0B"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            setTextColor(Color.parseColor("#F59E0B")) // Gold accent
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(6f), dp(3f), dp(6f), dp(3f))
+            setPadding(dp(6f), dp(2.5f), dp(6f), dp(2.5f))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#27272A"))
+                setColor(Color.parseColor("#1F2937"))
                 cornerRadius = dp(4f).toFloat()
+                setStroke(dp(0.8f), Color.parseColor("#374151"))
             }
             setOnClickListener {
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
@@ -229,18 +234,18 @@ class CardOverlayService : Service() {
         }
         topRow.addView(badge)
 
-        // Title text: Just bank name (e.g. "ICICI") as full number is added below
+        // Title text: Bank name
         val titleText = TextView(this).apply {
-            val label = when {
+            val displayBank = when {
                 bankName.isNotEmpty() -> bankName
                 cardName.isNotEmpty() -> cardName
                 else -> "Card"
             }
-            text = label
-            setTextColor(Color.parseColor("#D4D4D8"))
+            text = displayBank
+            setTextColor(Color.parseColor("#E4E4E7"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(8f), 0, dp(12f), 0)
+            setPadding(dp(6f), 0, dp(8f), 0)
             setOnClickListener {
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -256,14 +261,20 @@ class CardOverlayService : Service() {
         // Close button (✕)
         val closeBtn = TextView(this).apply {
             text = "✕"
-            setTextColor(Color.parseColor("#A1A1AA"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(Color.parseColor("#9CA3AF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(dp(6f), dp(2f), dp(6f), dp(2f))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(dp(6f), 0, 0, 0)
+            }
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#27272A"))
-                cornerRadius = dp(12f).toFloat()
+                setColor(Color.parseColor("#1F2937"))
+                cornerRadius = dp(10f).toFloat()
             }
             setOnClickListener {
                 stopSelf()
@@ -273,25 +284,25 @@ class CardOverlayService : Service() {
 
         root.addView(topRow)
 
-        // Card number in small text (with tap-to-copy)
+        // Row 2: Card Number clearly visible (never hidden) with tap-to-copy
         if (cardNumber.isNotEmpty()) {
             val numberRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
+                setPadding(dp(8f), dp(3.5f), dp(8f), dp(3.5f))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, dp(6f), 0, 0)
+                    setMargins(0, 0, 0, dp(6f))
                 }
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#27272A"))
-                    cornerRadius = dp(6f).toFloat()
+                    setColor(Color.parseColor("#1F2937"))
+                    cornerRadius = dp(5f).toFloat()
+                    setStroke(dp(0.8f), Color.parseColor("#374151"))
                 }
                 setOnClickListener {
                     val clean = cardNumber.replace("\\s+".toRegex(), "")
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("Card Number", clean))
                     Toast.makeText(context, "Card number copied", Toast.LENGTH_SHORT).show()
                 }
@@ -299,29 +310,27 @@ class CardOverlayService : Service() {
 
             val numberText = TextView(this).apply {
                 text = cardNumber
-                setTextColor(Color.parseColor("#E4E4E7"))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
                 typeface = Typeface.MONOSPACE
                 setTypeface(typeface, Typeface.BOLD)
                 letterSpacing = 0.04f
             }
             numberRow.addView(numberText)
+
+            val copyBadge = TextView(this).apply {
+                text = "Copy"
+                setTextColor(Color.parseColor("#9CA3AF"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(6f), 0, 0, 0)
+            }
+            numberRow.addView(copyBadge)
+
             root.addView(numberRow)
         }
 
-        // Subtle divider
-        val divider = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(1f)
-            ).apply {
-                setMargins(0, dp(8f), 0, dp(8f))
-            }
-            setBackgroundColor(Color.parseColor("#27272A"))
-        }
-        root.addView(divider)
-
-        // Data row: [EXPIRY box] [divider] [CVV box]
+        // Bottom row: [EXPIRY chip] [CVV chip]
         val dataRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -331,16 +340,15 @@ class CardOverlayService : Service() {
             )
         }
 
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
-        // Expiry Box
-        val expiryBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+        // Expiry Chip: [EXP  08/29]
+        val expiryChip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#27272A"))
-                cornerRadius = dp(8f).toFloat()
+                setColor(Color.parseColor("#1F2937"))
+                cornerRadius = dp(6f).toFloat()
+                setStroke(dp(0.8f), Color.parseColor("#374151"))
             }
             setOnClickListener {
                 if (expiry.isNotEmpty()) {
@@ -351,36 +359,37 @@ class CardOverlayService : Service() {
         }
 
         val expiryLabel = TextView(this).apply {
-            text = "EXPIRY"
-            setTextColor(Color.parseColor("#A1A1AA"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+            text = "EXP "
+            setTextColor(Color.parseColor("#9CA3AF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f)
             typeface = Typeface.DEFAULT_BOLD
         }
         val expiryVal = TextView(this).apply {
             text = expiry.ifEmpty { "--/--" }
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.MONOSPACE
             setTypeface(typeface, Typeface.BOLD)
         }
-        expiryBox.addView(expiryLabel)
-        expiryBox.addView(expiryVal)
-        dataRow.addView(expiryBox)
+        expiryChip.addView(expiryLabel)
+        expiryChip.addView(expiryVal)
+        dataRow.addView(expiryChip)
 
-        // Spacer
-        val space = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(10f), dp(1f))
+        // Spacer between chips
+        val chipSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(6f), dp(1f))
         }
-        dataRow.addView(space)
+        dataRow.addView(chipSpacer)
 
-        // CVV Box
-        val cvvBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(12f), dp(4f), dp(12f), dp(4f))
+        // CVV Chip: [CVV  123]
+        val cvvChip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#27272A"))
-                cornerRadius = dp(8f).toFloat()
+                setColor(Color.parseColor("#1F2937"))
+                cornerRadius = dp(6f).toFloat()
+                setStroke(dp(0.8f), Color.parseColor("#374151"))
             }
             setOnClickListener {
                 if (cvv.isNotEmpty()) {
@@ -391,21 +400,21 @@ class CardOverlayService : Service() {
         }
 
         val cvvLabel = TextView(this).apply {
-            text = "CVV"
-            setTextColor(Color.parseColor("#A1A1AA"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+            text = "CVV "
+            setTextColor(Color.parseColor("#9CA3AF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f)
             typeface = Typeface.DEFAULT_BOLD
         }
         val cvvVal = TextView(this).apply {
             text = cvv.ifEmpty { "---" }
             setTextColor(Color.parseColor("#FBBF24")) // Gold CVV
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.MONOSPACE
             setTypeface(typeface, Typeface.BOLD)
         }
-        cvvBox.addView(cvvLabel)
-        cvvBox.addView(cvvVal)
-        dataRow.addView(cvvBox)
+        cvvChip.addView(cvvLabel)
+        cvvChip.addView(cvvVal)
+        dataRow.addView(cvvChip)
 
         root.addView(dataRow)
 

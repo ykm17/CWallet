@@ -47,22 +47,20 @@ RCT_EXPORT_METHOD(showCardOverlay:(NSDictionary *)cardData
 
       NSString *header = @"";
       if (bankName.length > 0) {
-        header = [NSString stringWithFormat:@"💳 %@", bankName];
+        header = [NSString stringWithFormat:@"💳 EWallet • %@", bankName];
       } else if (cardName.length > 0) {
-        header = [NSString stringWithFormat:@"💳 %@", cardName];
-      } else if (last4.length > 0) {
-        header = [NSString stringWithFormat:@"💳 Card • %@", last4];
+        header = [NSString stringWithFormat:@"💳 EWallet • %@", cardName];
       } else {
-        header = @"💳 Card Details";
+        header = @"💳 EWallet";
       }
 
       content.title = header;
       if (cardNumber.length > 0) {
         content.subtitle = [NSString stringWithFormat:@"%@   •   EXP: %@   •   CVV: %@", cardNumber, expiry.length > 0 ? expiry : @"--/--", cvv.length > 0 ? cvv : @"---"];
       } else {
-        content.subtitle = [NSString stringWithFormat:@"EXPIRY: %@   |   CVV: %@", expiry.length > 0 ? expiry : @"--/--", cvv.length > 0 ? cvv : @"---"];
+        content.subtitle = [NSString stringWithFormat:@"EXP: %@   •   CVV: %@", expiry.length > 0 ? expiry : @"--/--", cvv.length > 0 ? cvv : @"---"];
       }
-      content.body = @"Tap to return to wallet. Card details remain visible here while paying.";
+      content.body = @"Tap to return to wallet.";
       content.sound = [UNNotificationSound defaultSound];
 
       UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:0.1 repeats:NO];
