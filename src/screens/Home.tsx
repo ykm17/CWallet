@@ -1,17 +1,18 @@
-import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl, Image, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl, Image, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert } from '../components/CustomAlert';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
 import ShareCardModal from '../components/ShareCardModal';
+import BankLogo from '../components/BankLogo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import auth from '@react-native-firebase/auth';
 import { Card } from '../types/Types';
-import { FAB, Text, SegmentedButtons, Searchbar, Icon, Dialog, Portal } from 'react-native-paper';
+import { FAB, Text, SegmentedButtons, Searchbar, Icon, Dialog, Portal, Modal } from 'react-native-paper';
 import { isEmpty } from 'lodash';
 import { APP_NAME, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constants/Constants';
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp, getDocs } from '@react-native-firebase/firestore';
@@ -37,6 +38,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [cardData, setCardData] = useState<Card[]>([]);
   const [isCardPersonal, setIsCardPersonal] = useState('PRL');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
+  const [selectedBankFilter, setSelectedBankFilter] = useState<string | null>(null);
+  const [selectedNameFilter, setSelectedNameFilter] = useState<string | null>(null);
+  const [bankFilterModalVisible, setBankFilterModalVisible] = useState(false);
+  const [nameFilterModalVisible, setNameFilterModalVisible] = useState(false);
+  const [bankFilterSearch, setBankFilterSearch] = useState('');
+  const [nameFilterSearch, setNameFilterSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
@@ -95,6 +102,67 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const debitCardsCount = useMemo(() => {
     return sourceCards.filter((card) => getCardEffectiveType(card) === 'DEBIT').length;
   }, [sourceCards]);
+
+  const availableBanks = useMemo(() => {
+    const bankSet = new Set<string>();
+    sourceCards.forEach((c) => {
+      if (c.bankName) {
+        bankSet.add(c.bankName);
+      }
+    });
+    return Array.from(bankSet).sort((a, b) => {
+      const nameA = BANK_DICTIONARY[a] || a;
+      const nameB = BANK_DICTIONARY[b] || b;
+      return nameA.localeCompare(nameB);
+    });
+  }, [sourceCards]);
+
+  const availableNames = useMemo(() => {
+    const nameSet = new Set<string>();
+    sourceCards.forEach((c) => {
+      const trimmed = c.ownerName ? c.ownerName.trim() : '';
+      if (trimmed) {
+        nameSet.add(trimmed);
+      }
+    });
+    return Array.from(nameSet).sort((a, b) => a.localeCompare(b));
+  }, [sourceCards]);
+
+  const bankCardCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sourceCards.forEach((c) => {
+      if (c.bankName) {
+        counts[c.bankName] = (counts[c.bankName] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [sourceCards]);
+
+  const nameCardCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sourceCards.forEach((c) => {
+      const trimmed = c.ownerName ? c.ownerName.trim() : '';
+      if (trimmed) {
+        counts[trimmed] = (counts[trimmed] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [sourceCards]);
+
+  const filteredAvailableBanks = useMemo(() => {
+    const q = bankFilterSearch.trim().toLowerCase();
+    if (!q) return availableBanks;
+    return availableBanks.filter((bankKey) => {
+      const fullName = (BANK_DICTIONARY[bankKey] || bankKey).toLowerCase();
+      return fullName.includes(q) || bankKey.toLowerCase().includes(q);
+    });
+  }, [availableBanks, bankFilterSearch]);
+
+  const filteredAvailableNames = useMemo(() => {
+    const q = nameFilterSearch.trim().toLowerCase();
+    if (!q) return availableNames;
+    return availableNames.filter((name) => name.toLowerCase().includes(q));
+  }, [availableNames, nameFilterSearch]);
 
   const filteredCards = sourceCards.filter((card: Card) => {
     const query = searchQuery.toLowerCase();
@@ -178,6 +246,14 @@ const Home: React.FC<Props> = ({ navigation }) => {
           setSelectedCardIds([]);
           return true;
         }
+        if (bankFilterModalVisible) {
+          setBankFilterModalVisible(false);
+          return true;
+        }
+        if (nameFilterModalVisible) {
+          setNameFilterModalVisible(false);
+          return true;
+        }
         if (logoutModalVisible) {
           setLogoutModalVisible(false);
           return true;
@@ -197,7 +273,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       );
 
       return () => backHandler.remove();
-    }, [modalVisible, cardToShare, selectionMode, logoutModalVisible, exitModalVisible]),
+    }, [modalVisible, cardToShare, selectionMode, logoutModalVisible, exitModalVisible, bankFilterModalVisible, nameFilterModalVisible]),
   );
 
   useEffect(() => {
@@ -395,10 +471,21 @@ const Home: React.FC<Props> = ({ navigation }) => {
     : (isConnected ? (sharedCardsLoading || groupsLoading) : false);
 
   const displayedCards = filteredCards.filter((card: Card) => {
-      if (selectedTypeFilter === 'ALL') return true;
+    if (selectedTypeFilter !== 'ALL') {
       const effectiveType = getCardEffectiveType(card);
-      return effectiveType === selectedTypeFilter;
-    });
+      if (effectiveType !== selectedTypeFilter) return false;
+    }
+    if (selectedBankFilter && card.bankName !== selectedBankFilter) {
+      return false;
+    }
+    if (
+      selectedNameFilter &&
+      (card.ownerName || '').trim().toLowerCase() !== selectedNameFilter.trim().toLowerCase()
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const handleShareCard = (card: Card) => {
     if (!isConnected) {
@@ -540,6 +627,266 @@ const Home: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
           </Dialog>
+
+          {/* Bank Filter Modal */}
+          <Modal
+            visible={bankFilterModalVisible}
+            onDismiss={() => setBankFilterModalVisible(false)}
+            contentContainerStyle={styles.filterModalContainer}
+          >
+            <View style={styles.filterModalHeader}>
+              <View style={styles.filterModalHeaderLeft}>
+                <View style={styles.filterModalIconWrap}>
+                  <Icon source="bank" size={18} color="#111111" />
+                </View>
+                <Text style={styles.filterModalTitle}>Filter by Bank</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setBankFilterModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon source="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {availableBanks.length > 5 && (
+              <View style={styles.filterModalSearchContainer}>
+                <Icon source="magnify" size={16} color="#9CA3AF" />
+                <TextInput
+                  placeholder="Search bank name..."
+                  placeholderTextColor="#9CA3AF"
+                  value={bankFilterSearch}
+                  onChangeText={setBankFilterSearch}
+                  style={styles.filterModalSearchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {bankFilterSearch.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setBankFilterSearch('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon source="close-circle" size={14} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            <FlatList
+              data={filteredAvailableBanks}
+              keyExtractor={(item) => item}
+              style={styles.filterModalList}
+              contentContainerStyle={styles.filterModalListContent}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                !bankFilterSearch ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      selectedBankFilter === null && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedBankFilter(null);
+                      setBankFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalAllIcon}>
+                      <Icon source="bank-outline" size={18} color="#4B5563" />
+                    </View>
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        selectedBankFilter === null && styles.filterModalItemTitleSelected,
+                      ]}>
+                        All Banks
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        Show cards from all banks ({sourceCards.length})
+                      </Text>
+                    </View>
+                    {selectedBankFilter === null && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const isSelected = selectedBankFilter === item;
+                const bankName = BANK_DICTIONARY[item] || item;
+                const count = bankCardCounts[item] || 0;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      isSelected && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedBankFilter(item);
+                      setBankFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <BankLogo bankKey={item} size={28} style={styles.filterModalBankLogo} />
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        isSelected && styles.filterModalItemTitleSelected,
+                      ]}>
+                        {bankName}
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        {count} {count === 1 ? 'card' : 'cards'}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.filterModalEmpty}>
+                  <Text style={styles.filterModalEmptyText}>
+                    {availableBanks.length === 0
+                      ? 'No cards available to filter'
+                      : `No bank matching "${bankFilterSearch}"`}
+                  </Text>
+                </View>
+              }
+            />
+          </Modal>
+
+          {/* Name Filter Modal */}
+          <Modal
+            visible={nameFilterModalVisible}
+            onDismiss={() => setNameFilterModalVisible(false)}
+            contentContainerStyle={styles.filterModalContainer}
+          >
+            <View style={styles.filterModalHeader}>
+              <View style={styles.filterModalHeaderLeft}>
+                <View style={styles.filterModalIconWrap}>
+                  <Icon source="account" size={18} color="#111111" />
+                </View>
+                <Text style={styles.filterModalTitle}>Filter by Cardholder</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setNameFilterModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon source="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {availableNames.length > 5 && (
+              <View style={styles.filterModalSearchContainer}>
+                <Icon source="magnify" size={16} color="#9CA3AF" />
+                <TextInput
+                  placeholder="Search cardholder name..."
+                  placeholderTextColor="#9CA3AF"
+                  value={nameFilterSearch}
+                  onChangeText={setNameFilterSearch}
+                  style={styles.filterModalSearchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {nameFilterSearch.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setNameFilterSearch('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon source="close-circle" size={14} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            <FlatList
+              data={filteredAvailableNames}
+              keyExtractor={(item) => item}
+              style={styles.filterModalList}
+              contentContainerStyle={styles.filterModalListContent}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                !nameFilterSearch ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      selectedNameFilter === null && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedNameFilter(null);
+                      setNameFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalAllIcon}>
+                      <Icon source="account-multiple-outline" size={18} color="#4B5563" />
+                    </View>
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        selectedNameFilter === null && styles.filterModalItemTitleSelected,
+                      ]}>
+                        All Cardholders
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        Show cards from all cardholders ({sourceCards.length})
+                      </Text>
+                    </View>
+                    {selectedNameFilter === null && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const isSelected = selectedNameFilter?.trim().toLowerCase() === item.trim().toLowerCase();
+                const count = nameCardCounts[item] || 0;
+                const initialChar = (item.charAt(0) || 'U').toUpperCase();
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      isSelected && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedNameFilter(item);
+                      setNameFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalNameAvatar}>
+                      <Text style={styles.filterModalNameAvatarText}>{initialChar}</Text>
+                    </View>
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        isSelected && styles.filterModalItemTitleSelected,
+                      ]}>
+                        {item}
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        {count} {count === 1 ? 'card' : 'cards'}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.filterModalEmpty}>
+                  <Text style={styles.filterModalEmptyText}>
+                    {availableNames.length === 0
+                      ? 'No cardholders available to filter'
+                      : `No cardholder matching "${nameFilterSearch}"`}
+                  </Text>
+                </View>
+              }
+            />
+          </Modal>
         </Portal>
 
         {/* Top Header Bar */}
@@ -683,8 +1030,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
           )}
         </View>
 
-        {/* Credit / Debit Filter Chips */}
-        <View style={styles.filterChipContainer}>
+        {/* Filter Chips Bar (Select, All, Credit, Debit, Bank, Name) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipContent}
+          style={styles.filterChipScroll}
+        >
           {isCardPersonal === 'PRL' && (
             <TouchableOpacity
               style={[
@@ -721,6 +1073,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           )}
+
           <TouchableOpacity
             style={[
               styles.filterChip,
@@ -784,7 +1137,93 @@ const Home: React.FC<Props> = ({ navigation }) => {
               Debit ({debitCardsCount})
             </Text>
           </TouchableOpacity>
-        </View>
+
+          {/* Bank Filter Chip */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedBankFilter !== null && styles.filterChipActive,
+            ]}
+            onPress={() => {
+              setBankFilterSearch('');
+              setBankFilterModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            {selectedBankFilter ? (
+              <BankLogo bankKey={selectedBankFilter} size={15} style={styles.chipBankLogo} />
+            ) : (
+              <Icon
+                source="bank-outline"
+                size={13}
+                color="#4B5563"
+              />
+            )}
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedBankFilter !== null && styles.filterChipTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {selectedBankFilter ? (BANK_DICTIONARY[selectedBankFilter] || selectedBankFilter) : 'Bank'}
+            </Text>
+            {selectedBankFilter ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedBankFilter(null);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+              >
+                <Icon source="close-circle" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <Icon source="chevron-down" size={13} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+
+          {/* Name Filter Chip */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedNameFilter !== null && styles.filterChipActive,
+            ]}
+            onPress={() => {
+              setNameFilterSearch('');
+              setNameFilterModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source="account-outline"
+              size={13}
+              color={selectedNameFilter !== null ? '#FFFFFF' : '#4B5563'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedNameFilter !== null && styles.filterChipTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {selectedNameFilter || 'Name'}
+            </Text>
+            {selectedNameFilter ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedNameFilter(null);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+              >
+                <Icon source="close-circle" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <Icon source="chevron-down" size={13} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+        </ScrollView>
 
         <FlatList
           data={displayedCards}
@@ -877,16 +1316,18 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.emptySubtitle}>
                     {searchQuery.trim().length > 0
                       ? `No cards matched "${searchQuery.trim()}". Try a different search.`
-                      : selectedTypeFilter !== 'ALL'
-                      ? `No ${selectedTypeFilter === 'CREDIT' ? 'Credit' : 'Debit'} cards found in ${isCardPersonal === 'PRL' ? 'My Cards' : 'Shared Cards'}.`
+                      : (selectedBankFilter || selectedNameFilter || selectedTypeFilter !== 'ALL')
+                      ? 'No cards match the selected filters.'
                       : 'Try clearing your filters.'}
                   </Text>
-                  {(searchQuery.trim().length > 0 || selectedTypeFilter !== 'ALL') && (
+                  {(searchQuery.trim().length > 0 || selectedTypeFilter !== 'ALL' || selectedBankFilter !== null || selectedNameFilter !== null) && (
                     <TouchableOpacity
                       style={styles.emptyClearButton}
                       onPress={() => {
                         setSearchQuery('');
                         setSelectedTypeFilter('ALL');
+                        setSelectedBankFilter(null);
+                        setSelectedNameFilter(null);
                       }}
                       activeOpacity={0.8}
                     >
@@ -1263,6 +1704,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
+  filterChipScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
+  },
+  filterChipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  chipBankLogo: {
+    marginRight: 2,
+  },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1580,5 +2034,132 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  // Filter Modals
+  filterModalContainer: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    borderRadius: 18,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  filterModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  filterModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterModalIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  filterModalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 38,
+    marginBottom: 10,
+  },
+  filterModalSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#111111',
+    marginLeft: 6,
+    paddingVertical: 0,
+  },
+  filterModalList: {
+    maxHeight: 340,
+  },
+  filterModalListContent: {
+    paddingBottom: 8,
+  },
+  filterModalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+    backgroundColor: '#FAFAFA',
+  },
+  filterModalItemRowSelected: {
+    backgroundColor: '#EEF2FF',
+  },
+  filterModalAllIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  filterModalBankLogo: {
+    marginRight: 12,
+  },
+  filterModalNameAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  filterModalNameAvatarText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  filterModalItemTextWrap: {
+    flex: 1,
+  },
+  filterModalItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111111',
+  },
+  filterModalItemTitleSelected: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  filterModalItemSub: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  filterModalEmpty: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  filterModalEmptyText: {
+    fontSize: 13,
+    color: '#9CA3AF',
   },
 });
