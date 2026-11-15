@@ -85,32 +85,6 @@ export const findRegisteredUser = async (identifier: string): Promise<WalletUser
   return findUserByAppleId(value);
 };
 
-export const hasAccessListEntry = async (email: string): Promise<boolean> => {
-  const normalized = normalizeEmail(email);
-  if (!normalized) {
-    return false;
-  }
-  try {
-    const accessDoc = await getDoc(doc(db(), COLLECTIONS.ACCESS_LIST, normalized));
-    if (accessDoc.exists()) {
-      return true;
-    }
-    const original = email.trim();
-    if (original !== normalized) {
-      const originalDoc = await getDoc(doc(db(), COLLECTIONS.ACCESS_LIST, original));
-      if (originalDoc.exists()) {
-        return true;
-      }
-    }
-    // Check if stored as field 'email' in any document
-    const querySnapshot = await getDocs(
-      query(collection(db(), COLLECTIONS.ACCESS_LIST), where('email', '==', normalized), limit(1)),
-    );
-    if (!querySnapshot.empty) {
-      return true;
-    }
-  } catch (error) {
-    console.warn('Error reading accessList:', error);
-  }
-  return false;
+export const hasAccessListEntry = async (_email: string): Promise<boolean> => {
+  return true;
 };

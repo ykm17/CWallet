@@ -12,7 +12,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
-import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore';
 import { upsertCurrentUserProfile } from '../services/userService';
 import { activatePendingMembershipsForUser } from '../services/groupService';
 import { activatePendingCardAccessForUser } from '../services/sharingService';
@@ -220,31 +219,17 @@ const Login: React.FC<Props> = ({ navigation }) => {
       const userCredential = await auth().signInWithCredential(googleCredential);
       const currentUser = userCredential.user;
 
-      if (currentUser?.email) {
-        const db = getFirestore();
-        const accessDoc = await getDoc(doc(db, 'accessList', currentUser.email));
-        if (accessDoc.exists()) {
-          cacheAuthSession(currentUser);
-          await upsertCurrentUserProfile();
-          await Promise.allSettled([
-            activatePendingMembershipsForUser(),
-            activatePendingCardAccessForUser(),
-          ]);
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Home' }],
-          });
-        } else {
-          await auth().signOut();
-          try {
-            await GoogleSignin.signOut();
-          } catch (_) {}
-          await clearCachedAuthSession();
-          setIsAlreadyLoggedIn(false);
-          setUserEmail(null);
-          setErrorMessage(`You do not have access to ${APP_NAME}.`);
-          setVisible(true);
-        }
+      if (currentUser) {
+        cacheAuthSession(currentUser);
+        await upsertCurrentUserProfile();
+        await Promise.allSettled([
+          activatePendingMembershipsForUser(),
+          activatePendingCardAccessForUser(),
+        ]);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
       }
     } catch (error) {
       console.error('Google Sign-In Error:', error);

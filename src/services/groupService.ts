@@ -18,7 +18,7 @@ import { getFirestore } from '@react-native-firebase/firestore';
 import { COLLECTIONS, CONTRIBUTION, MEMBER_ROLE, MEMBER_STATUS } from '../constants/Firestore';
 import { ContributionPermission, Group, GroupMember, WalletUser } from '../types/Types';
 import { chunkForBatch, isSelfRecipient, normalizeEmail } from './sharingUtils';
-import { findRegisteredUser, findUserByEmail, hasAccessListEntry, isValidEmail } from './userService';
+import { findRegisteredUser, findUserByEmail, isValidEmail } from './userService';
 import { APP_NAME } from '../constants/Constants';
 
 const db = () => getFirestore();
