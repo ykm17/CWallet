@@ -25,6 +25,9 @@ import {
 import { requestAllAppPermissions } from '../services/cardOverlayService';
 import { ConnectivityContext } from '../util/Connectivity';
 import { APP_NAME, WEB_CLIENT_ID } from '../constants/Constants';
+import EncryptedStorage from 'react-native-encrypted-storage';
+
+const AUTH_USER_KEY = 'cwallet_auth_user';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -70,9 +73,48 @@ const Login: React.FC<Props> = ({ navigation }) => {
     };
   }, [initBiometrics]);
 
-  // Auth state listener: does NOT auto-trigger biometrics!
+  const cacheAuthSession = async (user: { uid: string; email?: string | null; displayName?: string | null }) => {
+    try {
+      await EncryptedStorage.setItem(
+        AUTH_USER_KEY,
+        JSON.stringify({
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || '',
+        }),
+      );
+    } catch (err) {
+      console.log('Error caching auth session:', err);
+    }
+  };
+
+  const clearCachedAuthSession = async () => {
+    try {
+      await EncryptedStorage.removeItem(AUTH_USER_KEY);
+    } catch (err) {
+      console.log('Error clearing cached auth session:', err);
+    }
+  };
+
+  // Auth state listener with offline session recovery: does NOT auto-trigger biometrics!
   useEffect(() => {
     let isMounted = true;
+
+    // Check cached session first for instant offline restore
+    EncryptedStorage.getItem(AUTH_USER_KEY)
+      .then((cached) => {
+        if (cached && isMounted) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed?.email || parsed?.uid) {
+              setIsAlreadyLoggedIn(true);
+              setUserEmail(parsed.email || null);
+              setCheckingAuth(false);
+            }
+          } catch (_) {}
+        }
+      })
+      .catch((err) => console.log('Error checking cached auth:', err));
 
     const unsubscribe = auth().onAuthStateChanged(async (currentUser) => {
       if (!isMounted) return;
@@ -81,12 +123,29 @@ const Login: React.FC<Props> = ({ navigation }) => {
       if (currentUser) {
         setIsAlreadyLoggedIn(true);
         setUserEmail(currentUser.email || null);
-        // User explicitly taps the unlock button
+        cacheAuthSession(currentUser);
+        setCheckingAuth(false);
       } else {
-        setIsAlreadyLoggedIn(false);
-        setUserEmail(null);
+        // If Firebase Auth returns null offline, check if we have a valid offline session
+        try {
+          const cached = await EncryptedStorage.getItem(AUTH_USER_KEY);
+          if (cached && isMounted) {
+            const parsed = JSON.parse(cached);
+            if (parsed?.email || parsed?.uid) {
+              setIsAlreadyLoggedIn(true);
+              setUserEmail(parsed.email || null);
+              setCheckingAuth(false);
+              return;
+            }
+          }
+        } catch (_) {}
+
+        if (isMounted) {
+          setIsAlreadyLoggedIn(false);
+          setUserEmail(null);
+          setCheckingAuth(false);
+        }
       }
-      setCheckingAuth(false);
     });
 
     return () => {
@@ -102,35 +161,38 @@ const Login: React.FC<Props> = ({ navigation }) => {
 
     try {
       const isBioAvailable = await checkBiometricAvailability();
+      let isAuthenticated = false;
+
       if (isBioAvailable) {
-        const isAuthenticated = await authenticateWithBiometrics();
-        if (isAuthenticated) {
-          await upsertCurrentUserProfile();
-          await Promise.allSettled([
+        isAuthenticated = await authenticateWithBiometrics();
+      } else {
+        // Biometrics unavailable on device; allow signed-in user to unlock vault
+        isAuthenticated = true;
+      }
+
+      if (isAuthenticated) {
+        // If online, perform profile sync and pending access activations in background
+        // Never let cloud sync or network latency block or fail local authentication!
+        if (isConnected) {
+          upsertCurrentUserProfile().catch((err) => {
+            console.log('Profile sync deferred:', err);
+          });
+          Promise.allSettled([
             activatePendingMembershipsForUser(),
             activatePendingCardAccessForUser(),
-          ]);
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Home' }],
+          ]).catch((err) => {
+            console.log('Pending access activation deferred:', err);
           });
-          return;
-        } else {
-          setErrorMessage('Biometric authentication cancelled or not recognized.');
-          setVisible(true);
         }
-      } else {
-        // Biometrics unavailable on device; proceed to Home for signed-in user
-        await upsertCurrentUserProfile();
-        await Promise.allSettled([
-          activatePendingMembershipsForUser(),
-          activatePendingCardAccessForUser(),
-        ]);
+
         navigation.reset({
           index: 0,
           routes: [{ name: 'Home' }],
         });
         return;
+      } else {
+        setErrorMessage('Biometric authentication cancelled or not recognized.');
+        setVisible(true);
       }
     } catch (error) {
       console.error('Error during biometric authentication:', error);
@@ -162,6 +224,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
         const db = getFirestore();
         const accessDoc = await getDoc(doc(db, 'accessList', currentUser.email));
         if (accessDoc.exists()) {
+          cacheAuthSession(currentUser);
           await upsertCurrentUserProfile();
           await Promise.allSettled([
             activatePendingMembershipsForUser(),
@@ -176,6 +239,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
           try {
             await GoogleSignin.signOut();
           } catch (_) {}
+          await clearCachedAuthSession();
           setIsAlreadyLoggedIn(false);
           setUserEmail(null);
           setErrorMessage(`You do not have access to ${APP_NAME}.`);
@@ -199,6 +263,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
       try {
         await GoogleSignin.signOut();
       } catch (_) {}
+      await clearCachedAuthSession();
       setIsAlreadyLoggedIn(false);
       setUserEmail(null);
     } catch (error) {

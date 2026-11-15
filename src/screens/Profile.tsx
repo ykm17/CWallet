@@ -25,6 +25,7 @@ import {
   requestOverlayPermission,
 } from '../services/cardOverlayService';
 import { ConnectivityContext } from '../util/Connectivity';
+import EncryptedStorage from 'react-native-encrypted-storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -96,6 +97,11 @@ const Profile: React.FC<Props> = ({ navigation }) => {
       try {
         await GoogleSignin.signOut();
       } catch (_) {}
+      await Promise.allSettled([
+        EncryptedStorage.removeItem('cwallet_auth_user'),
+        EncryptedStorage.removeItem('cards'),
+        EncryptedStorage.removeItem('shared_cards'),
+      ]);
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],

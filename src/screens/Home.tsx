@@ -48,7 +48,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const { isConnected } = useContext(ConnectivityContext);
   const { isPrivacyMode, togglePrivacyMode } = usePrivacy();
   const { groups, loading: groupsLoading } = useUserGroups();
-  const { cards: sharedCards, loading: sharedCardsLoading } = useAccessibleCards(groups, isConnected);
+  const { cards: sharedCards, loading: sharedCardsLoading, refetchOfflineCards: refetchOfflineSharedCards } = useAccessibleCards(groups, isConnected);
 
   const currentUser = auth().currentUser;
   const displayName = currentUser?.displayName || 'CWallet User';
@@ -250,6 +250,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
     try {
       await auth().signOut();
       await GoogleSignin.signOut();
+      await Promise.allSettled([
+        EncryptedStorage.removeItem('cwallet_auth_user'),
+        EncryptedStorage.removeItem('cards'),
+        EncryptedStorage.removeItem('shared_cards'),
+      ]);
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
@@ -373,7 +378,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
           })(),
         ]);
       } else {
-        await fetchCardsFromStorage();
+        await Promise.allSettled([
+          fetchCardsFromStorage(),
+          refetchOfflineSharedCards?.(),
+        ]);
       }
     } catch (e) {
       console.error('Failed to refresh cards:', e);

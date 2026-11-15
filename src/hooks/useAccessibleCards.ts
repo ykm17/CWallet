@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import auth from '@react-native-firebase/auth';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { Card, CardGroupAccess, CardUserAccess, Group } from '../types/Types';
@@ -7,16 +7,39 @@ import { parseCardDocument } from '../services/cardService';
 import { listenAccessForGroups, listenAccessForUser } from '../services/sharingService';
 import { getAppleUserId } from '../services/userService';
 import { sortCardsByLatest, toTimestampMillis } from '../services/sharingUtils';
+import EncryptedStorage from 'react-native-encrypted-storage';
+
+export const SHARED_CARDS_STORAGE_KEY = 'shared_cards';
 
 export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
   const [accessRecords, setAccessRecords] = useState<CardGroupAccess[]>([]);
   const [userAccessRecords, setUserAccessRecords] = useState<CardUserAccess[]>([]);
   const [cardsById, setCardsById] = useState<Record<string, Card>>({});
   const [loading, setLoading] = useState(false);
+  const [offlineCards, setOfflineCards] = useState<Card[]>([]);
   const cardUnsubsRef = useRef<Array<() => void>>([]);
 
   const groupIds = useMemo(() => groups.map((group) => group.groupId).sort().join(','), [groups]);
   const groupList = useMemo(() => groups, [groupIds]);
+
+  // Load securely cached shared cards for offline mode
+  const loadOfflineCards = useCallback(async () => {
+    try {
+      const jsonValue = await EncryptedStorage.getItem(SHARED_CARDS_STORAGE_KEY);
+      if (jsonValue) {
+        const parsed = JSON.parse(jsonValue);
+        if (Array.isArray(parsed)) {
+          setOfflineCards(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load offline shared cards:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOfflineCards();
+  }, [loadOfflineCards, enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -187,5 +210,27 @@ export const useAccessibleCards = (groups: Group[], enabled: boolean) => {
     return sortCardsByLatest(mapped);
   }, [cardsById, accessRecords, userAccessRecords, groupList]);
 
-  return { cards, accessRecords, userAccessRecords, loading };
+  // Persist live shared cards to EncryptedStorage when online
+  useEffect(() => {
+    if (enabled && cards.length > 0) {
+      EncryptedStorage.setItem(SHARED_CARDS_STORAGE_KEY, JSON.stringify(cards)).catch((e) =>
+        console.error('Failed to save shared cards to secure storage:', e),
+      );
+    }
+  }, [enabled, cards]);
+
+  const activeCards = useMemo(() => {
+    if (enabled) {
+      return cards;
+    }
+    return cards.length > 0 ? cards : offlineCards;
+  }, [enabled, cards, offlineCards]);
+
+  return {
+    cards: activeCards,
+    accessRecords,
+    userAccessRecords,
+    loading: enabled ? loading : false,
+    refetchOfflineCards: loadOfflineCards,
+  };
 };
