@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, BackHandler } from 'react-native';
 import { Alert } from './CustomAlert';
 import { Button, Icon, Modal, Portal, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
@@ -73,6 +73,24 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
 
   const savingRef = useRef(false);
 
+  const handleDismiss = () => {
+    if (saving || savingRef.current) return;
+    onDismiss();
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    const onBackPress = () => {
+      if (saving || savingRef.current) {
+        return true;
+      }
+      onDismiss();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [visible, saving, onDismiss]);
+
   const handleSave = async () => {
     if (savingRef.current || saving) return;
     if (!isConnected) {
@@ -127,7 +145,12 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
 
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.container}>
+      <Modal
+        visible={visible}
+        dismissable={false}
+        onDismiss={handleDismiss}
+        contentContainerStyle={styles.container}
+      >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Share card</Text>
@@ -135,8 +158,13 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
               {card ? `${card.name || card.ownerName} · ${BANK_DICTIONARY[card.bankName] || card.bankName}` : ''}
             </Text>
           </View>
-          <TouchableOpacity onPress={onDismiss}>
-            <Icon source="close" size={20} color="#555555" />
+          <TouchableOpacity
+            onPress={handleDismiss}
+            disabled={saving}
+            style={saving && { opacity: 0.3 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon source="close" size={20} color={saving ? '#9CA3AF' : '#555555'} />
           </TouchableOpacity>
         </View>
 
@@ -151,7 +179,7 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
           Select every group that should be able to view this card. Sharing never copies the card or changes ownership.
         </Text>
 
-        <ScrollView style={styles.list}>
+        <ScrollView style={styles.list} pointerEvents={saving ? 'none' : 'auto'}>
           {groups.length === 0 ? (
             <Text style={styles.empty}>Join or create a group first.</Text>
           ) : groups.map((group) => {
@@ -209,6 +237,8 @@ const ShareCardModal: React.FC<ShareCardModalProps> = ({ visible, card, onDismis
         >
           {!isConnected
             ? 'Offline (Cannot save)'
+            : saving
+            ? 'Saving sharing...'
             : hasChanges
             ? 'Save sharing'
             : 'No changes to save'}

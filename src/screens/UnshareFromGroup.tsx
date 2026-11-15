@@ -45,6 +45,15 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
   const savingRef = useRef(false);
 
   useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (saving || savingRef.current) {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, saving]);
+
+  useEffect(() => {
     navigation.setOptions({
       title: 'Unshare cards',
       headerTitleAlign: 'center',

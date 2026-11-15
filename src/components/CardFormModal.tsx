@@ -10,6 +10,7 @@ import {
   FlatList,
   Animated,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import { Alert } from './CustomAlert';
 import {
@@ -198,6 +199,57 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     setNfcStatusText('');
     await cancelNfcScan();
   };
+
+  const handleDismiss = () => {
+    // Disallow closing when adding or updating card in database
+    if (submitting || submittingRef.current) {
+      return;
+    }
+    onDismiss();
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const onBackPress = () => {
+      // Disallow closing when adding or updating card in database
+      if (submitting || submittingRef.current) {
+        return true;
+      }
+      if (nfcScanning) {
+        stopNfcScan();
+        return true;
+      }
+      if (bankPickerVisible) {
+        setBankPickerVisible(false);
+        return true;
+      }
+      if (networkMenuVisible) {
+        setNetworkMenuVisible(false);
+        return true;
+      }
+      if (typeMenuVisible) {
+        setTypeMenuVisible(false);
+        return true;
+      }
+      onDismiss();
+      return true;
+    };
+
+    const backSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => backSubscription.remove();
+  }, [
+    visible,
+    submitting,
+    nfcScanning,
+    bankPickerVisible,
+    networkMenuVisible,
+    typeMenuVisible,
+    onDismiss,
+  ]);
 
   const handleNfcScan = async () => {
     if (nfcScanningRef.current || nfcScanning) return;
@@ -413,7 +465,8 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     <Portal>
       <Modal
         visible={visible}
-        onDismiss={onDismiss}
+        dismissable={false}
+        onDismiss={handleDismiss}
         style={modalWrapperStyle}
         contentContainerStyle={modalContentStyle}
       >
@@ -423,15 +476,18 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
               {isUpdate ? 'Edit Card' : 'Add New Card'}
             </Text>
             <Text style={styles.modalSubtitle}>
-              {isUpdate ? 'Update your card details' : 'Save your card details securely'}
+              {submitting
+                ? (isUpdate ? 'Updating card in database...' : 'Adding card to database...')
+                : (isUpdate ? 'Update your card details' : 'Save your card details securely')}
             </Text>
           </View>
           <TouchableOpacity
-            style={styles.closeModalBtn}
-            onPress={onDismiss}
+            style={[styles.closeModalBtn, submitting && { opacity: 0.3 }]}
+            onPress={handleDismiss}
+            disabled={submitting}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Icon source="close" size={20} color="#555555" />
+            <Icon source="close" size={20} color={submitting ? '#9CA3AF' : '#555555'} />
           </TouchableOpacity>
         </View>
 
@@ -439,6 +495,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={true}
+          pointerEvents={submitting ? 'none' : 'auto'}
         >
           {!isConnected && (
             <View style={styles.offlineBanner}>
@@ -865,24 +922,31 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
           {/* Action Buttons: Cancel and Save Card */}
           <View style={styles.actionButtonsRow}>
             <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onDismiss}
+              style={[styles.cancelBtn, submitting && { opacity: 0.4 }]}
+              onPress={handleDismiss}
+              disabled={submitting}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Text style={[styles.cancelBtnText, submitting && { color: '#9CA3AF' }]}>Cancel</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.saveBtn,
                 isFormValid && !submitting && isConnected && styles.saveBtnActive,
+                submitting && { opacity: 0.8 },
               ]}
               onPress={handleFormSubmit}
               disabled={!isFormValid || submitting || !isConnected}
               activeOpacity={0.8}
             >
               {submitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <View style={styles.submittingBtnContent}>
+                  <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.saveBtnText}>
+                    {isUpdate ? 'Updating...' : 'Adding...'}
+                  </Text>
+                </View>
               ) : (
                 <>
                   <Icon
@@ -1344,6 +1408,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  submittingBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   nfcBannerButton: {
     flexDirection: 'row',

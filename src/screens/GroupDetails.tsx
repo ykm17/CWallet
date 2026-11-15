@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, TextInput as RNTextInput, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, TextInput as RNTextInput, RefreshControl, ActivityIndicator, BackHandler } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Dialog, Icon, Portal, Text } from 'react-native-paper';
@@ -38,6 +38,34 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
   const leavingRef = useRef(false);
   const removingMemberRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (deleting || deletingRef.current || leaving || leavingRef.current || adding || addingRef.current || removingMemberRef.current) {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, deleting, leaving, adding]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (deleting || deletingRef.current || leaving || leavingRef.current || adding || addingRef.current || removingMemberRef.current) {
+        return true;
+      }
+      if (deleteVisible) {
+        setDeleteVisible(false);
+        return true;
+      }
+      if (leaveVisible) {
+        setLeaveVisible(false);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [deleteVisible, leaveVisible, deleting, leaving, adding]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -228,9 +256,13 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       deletingRef.current = true;
       setDeleting(true);
       await deleteGroup(groupId);
+      deletingRef.current = false;
+      setDeleting(false);
       setDeleteVisible(false);
       navigation.goBack();
     } catch (error: any) {
+      deletingRef.current = false;
+      setDeleting(false);
       Alert.alert('Could not delete group', error.message);
     } finally {
       deletingRef.current = false;
@@ -248,9 +280,13 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       leavingRef.current = true;
       setLeaving(true);
       await leaveGroup(groupId);
+      leavingRef.current = false;
+      setLeaving(false);
       setLeaveVisible(false);
       navigation.goBack();
     } catch (error: any) {
+      leavingRef.current = false;
+      setLeaving(false);
       Alert.alert('Could not leave group', error.message || 'Please try again.');
     } finally {
       leavingRef.current = false;
@@ -517,7 +553,8 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
       <Portal>
         <Dialog
           visible={leaveVisible}
-          onDismiss={() => { if (!leaving) setLeaveVisible(false); }}
+          dismissable={false}
+          onDismiss={() => { if (!leaving && !leavingRef.current) setLeaveVisible(false); }}
           style={styles.confirmDialog}
         >
           <View style={styles.confirmDialogContent}>
@@ -532,12 +569,12 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             </Text>
             <View style={styles.confirmDialogActions}>
               <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => setLeaveVisible(false)}
+                style={[styles.confirmCancelBtn, leaving && { opacity: 0.4 }]}
+                onPress={() => { if (!leaving && !leavingRef.current) setLeaveVisible(false); }}
                 disabled={leaving}
                 activeOpacity={0.7}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={[styles.confirmCancelText, leaving && { color: '#9CA3AF' }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, leaving && { opacity: 0.6 }]}
@@ -554,7 +591,8 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
 
         <Dialog
           visible={deleteVisible}
-          onDismiss={() => setDeleteVisible(false)}
+          dismissable={false}
+          onDismiss={() => { if (!deleting && !deletingRef.current) setDeleteVisible(false); }}
           style={styles.confirmDialog}
         >
           <View style={styles.confirmDialogContent}>
@@ -569,12 +607,12 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             </Text>
             <View style={styles.confirmDialogActions}>
               <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => setDeleteVisible(false)}
+                style={[styles.confirmCancelBtn, deleting && { opacity: 0.4 }]}
+                onPress={() => { if (!deleting && !deletingRef.current) setDeleteVisible(false); }}
                 disabled={deleting}
                 activeOpacity={0.7}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={[styles.confirmCancelText, deleting && { color: '#9CA3AF' }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, deleting && { opacity: 0.6 }]}

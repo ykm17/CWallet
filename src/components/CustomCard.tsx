@@ -43,7 +43,10 @@ const CustomCard: React.FC<CardProps> = ({
   const { isPrivacyMode } = usePrivacy();
 
   const showDialog = () => setVisible(true);
-  const hideDialog = () => setVisible(false);
+  const hideDialog = () => {
+    if (deleting || deletingRef.current) return;
+    setVisible(false);
+  };
   const hideSharedGroups = () => setSharedGroupsVisible(false);
 
   const handleEdit = () => {
@@ -102,9 +105,13 @@ const CustomCard: React.FC<CardProps> = ({
       deletingRef.current = true;
       setDeleting(true);
       await deleteOwnedCard(cardDetails.key);
+      deletingRef.current = false;
+      setDeleting(false);
       hideDialog();
     } catch (error) {
       console.error('Error deleting card:', error);
+      deletingRef.current = false;
+      setDeleting(false);
     } finally {
       deletingRef.current = false;
       setDeleting(false);
@@ -526,6 +533,7 @@ const CustomCard: React.FC<CardProps> = ({
 
           <Dialog
             visible={visible}
+            dismissable={false}
             onDismiss={hideDialog}
             style={styles.deleteDialog}
           >
@@ -565,12 +573,12 @@ const CustomCard: React.FC<CardProps> = ({
 
               <View style={styles.deleteDialogActions}>
                 <TouchableOpacity
-                  style={styles.cancelBtn}
+                  style={[styles.cancelBtn, deleting && { opacity: 0.4 }]}
                   onPress={hideDialog}
                   disabled={deleting}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                  <Text style={[styles.cancelBtnText, deleting && { color: '#9CA3AF' }]}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

@@ -46,6 +46,15 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
 
   const savingRef = useRef(false);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (saving || savingRef.current) {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, saving]);
+
   const handleSave = async () => {
     if (saving || savingRef.current) return;
     if (!isConnected) {
@@ -60,9 +69,13 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
       setSaving(true);
       if (groupId) {
         await updateGroup(groupId, { name, contributionPermission: permission });
+        savingRef.current = false;
+        setSaving(false);
         navigation.goBack();
       } else {
         const createdId = await createGroup(name, permission);
+        savingRef.current = false;
+        setSaving(false);
         navigation.replace('GroupDetails', { groupId: createdId });
       }
     } catch (error: any) {
@@ -75,7 +88,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} pointerEvents={saving ? 'none' : 'auto'}>
         {!isConnected && (
           <View style={styles.offlineBanner}>
             <Icon source="cloud-off-outline" size={16} color="#B91C1C" />
@@ -94,7 +107,7 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
           mode="outlined"
           placeholder="Family, Friends, Work..."
           style={styles.input}
-          editable={isConnected}
+          editable={isConnected && !saving}
         />
         {!name.trim() && (
           <HelperText type="info">Choose a name. Duplicate names are allowed across users.</HelperText>

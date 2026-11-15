@@ -19,7 +19,7 @@ import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnaps
 import { encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
 import { usePrivacy } from '../util/PrivacyContext';
-import { detectCardType } from '../util/Utils';
+import { detectCardType, detectCardNetwork } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { parseCardDocument } from '../services/cardService';
 import { sortCardsByLatest } from '../services/sharingUtils';
@@ -39,11 +39,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [isCardPersonal, setIsCardPersonal] = useState('PRL');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [selectedBankFilter, setSelectedBankFilter] = useState<string | null>(null);
+  const [selectedNetworkFilter, setSelectedNetworkFilter] = useState<string | null>(null);
   const [selectedNameFilter, setSelectedNameFilter] = useState<string | null>(null);
   const [bankFilterModalVisible, setBankFilterModalVisible] = useState(false);
+  const [networkFilterModalVisible, setNetworkFilterModalVisible] = useState(false);
   const [nameFilterModalVisible, setNameFilterModalVisible] = useState(false);
   const [bankFilterSearch, setBankFilterSearch] = useState('');
+  const [networkFilterSearch, setNetworkFilterSearch] = useState('');
   const [nameFilterSearch, setNameFilterSearch] = useState('');
+  const [isSavingCard, setIsSavingCard] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
@@ -69,6 +73,13 @@ const Home: React.FC<Props> = ({ navigation }) => {
     const detected = detectCardType(card.name);
     if (detected) return detected.toUpperCase();
     if (card.limit && Number(card.limit.replace(/\D/g, '')) > 0) return 'CREDIT';
+    return '';
+  };
+
+  const getCardEffectiveNetwork = (card: Card): string => {
+    if (card.network) return card.network.toUpperCase();
+    const detected = detectCardNetwork(card.number, card.name);
+    if (detected) return detected.toUpperCase();
     return '';
   };
 
@@ -128,11 +139,37 @@ const Home: React.FC<Props> = ({ navigation }) => {
     return Array.from(nameSet).sort((a, b) => a.localeCompare(b));
   }, [sourceCards]);
 
+  const availableNetworks = useMemo(() => {
+    const netSet = new Set<string>();
+    sourceCards.forEach((c) => {
+      const net = getCardEffectiveNetwork(c);
+      if (net) {
+        netSet.add(net);
+      }
+    });
+    return Array.from(netSet).sort((a, b) => {
+      const nameA = CARD_NETWORKS[a] || a;
+      const nameB = CARD_NETWORKS[b] || b;
+      return nameA.localeCompare(nameB);
+    });
+  }, [sourceCards]);
+
   const bankCardCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     sourceCards.forEach((c) => {
       if (c.bankName) {
         counts[c.bankName] = (counts[c.bankName] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [sourceCards]);
+
+  const networkCardCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sourceCards.forEach((c) => {
+      const net = getCardEffectiveNetwork(c);
+      if (net) {
+        counts[net] = (counts[net] || 0) + 1;
       }
     });
     return counts;
@@ -157,6 +194,15 @@ const Home: React.FC<Props> = ({ navigation }) => {
       return fullName.includes(q) || bankKey.toLowerCase().includes(q);
     });
   }, [availableBanks, bankFilterSearch]);
+
+  const filteredAvailableNetworks = useMemo(() => {
+    const q = networkFilterSearch.trim().toLowerCase();
+    if (!q) return availableNetworks;
+    return availableNetworks.filter((netKey) => {
+      const fullName = (CARD_NETWORKS[netKey] || netKey).toLowerCase();
+      return fullName.includes(q) || netKey.toLowerCase().includes(q);
+    });
+  }, [availableNetworks, networkFilterSearch]);
 
   const filteredAvailableNames = useMemo(() => {
     const q = nameFilterSearch.trim().toLowerCase();
@@ -205,6 +251,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
   };
 
   const hideModal = () => {
+    if (savingCardRef.current || isSavingCard) {
+      console.log('Cannot dismiss card modal while database update is in progress');
+      return;
+    }
     setModalVisible(false);
     setCardToEdit(null);
   };
@@ -234,6 +284,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
       // Handle hardware back press only when Home screen is focused
       const onBackPress = () => {
         if (modalVisible) {
+          if (savingCardRef.current || isSavingCard) {
+            // Do not allow closing when adding or updating card in database
+            return true;
+          }
           hideModal();
           return true;
         }
@@ -248,6 +302,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
         }
         if (bankFilterModalVisible) {
           setBankFilterModalVisible(false);
+          return true;
+        }
+        if (networkFilterModalVisible) {
+          setNetworkFilterModalVisible(false);
           return true;
         }
         if (nameFilterModalVisible) {
@@ -273,7 +331,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
       );
 
       return () => backHandler.remove();
-    }, [modalVisible, cardToShare, selectionMode, logoutModalVisible, exitModalVisible, bankFilterModalVisible, nameFilterModalVisible]),
+    }, [modalVisible, isSavingCard, cardToShare, selectionMode, logoutModalVisible, exitModalVisible, bankFilterModalVisible, networkFilterModalVisible, nameFilterModalVisible]),
   );
 
   useEffect(() => {
@@ -344,9 +402,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const savingCardRef = useRef(false);
 
   const handleSaveCard = async (savedCard: Card) => {
-    if (savingCardRef.current) return;
+    if (savingCardRef.current || isSavingCard) return;
     try {
       savingCardRef.current = true;
+      setIsSavingCard(true);
       console.log('Form submitted successfully!');
       savedCard.email = auth().currentUser?.email || '';
       console.log("Card data before encryption:", savedCard);
@@ -374,12 +433,18 @@ const Home: React.FC<Props> = ({ navigation }) => {
       }
 
       setIsCardPersonal('PRL');
+      // DB operation finished - allow closing now
+      savingCardRef.current = false;
+      setIsSavingCard(false);
       hideModal();
     } catch (error) {
       console.error('Error in handleSaveCard:', error);
+      savingCardRef.current = false;
+      setIsSavingCard(false);
       Alert.alert('Save Failed', 'Could not save the card. Please try again.');
     } finally {
       savingCardRef.current = false;
+      setIsSavingCard(false);
     }
   };
 
@@ -477,6 +542,10 @@ const Home: React.FC<Props> = ({ navigation }) => {
     }
     if (selectedBankFilter && card.bankName !== selectedBankFilter) {
       return false;
+    }
+    if (selectedNetworkFilter) {
+      const effectiveNet = getCardEffectiveNetwork(card);
+      if (effectiveNet !== selectedNetworkFilter) return false;
     }
     if (
       selectedNameFilter &&
@@ -751,6 +820,139 @@ const Home: React.FC<Props> = ({ navigation }) => {
                     {availableBanks.length === 0
                       ? 'No cards available to filter'
                       : `No bank matching "${bankFilterSearch}"`}
+                  </Text>
+                </View>
+              }
+            />
+          </Modal>
+
+          {/* Network Filter Modal */}
+          <Modal
+            visible={networkFilterModalVisible}
+            onDismiss={() => setNetworkFilterModalVisible(false)}
+            contentContainerStyle={styles.filterModalContainer}
+          >
+            <View style={styles.filterModalHeader}>
+              <View style={styles.filterModalHeaderLeft}>
+                <View style={styles.filterModalIconWrap}>
+                  <Icon source="credit-card-chip-outline" size={18} color="#111111" />
+                </View>
+                <Text style={styles.filterModalTitle}>Filter by Network</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setNetworkFilterModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon source="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {availableNetworks.length > 5 && (
+              <View style={styles.filterModalSearchContainer}>
+                <Icon source="magnify" size={16} color="#9CA3AF" />
+                <TextInput
+                  placeholder="Search network name..."
+                  placeholderTextColor="#9CA3AF"
+                  value={networkFilterSearch}
+                  onChangeText={setNetworkFilterSearch}
+                  style={styles.filterModalSearchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {networkFilterSearch.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setNetworkFilterSearch('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon source="close-circle" size={14} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            <FlatList
+              data={filteredAvailableNetworks}
+              keyExtractor={(item) => item}
+              style={styles.filterModalList}
+              contentContainerStyle={styles.filterModalListContent}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                !networkFilterSearch ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      selectedNetworkFilter === null && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedNetworkFilter(null);
+                      setNetworkFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalAllIcon}>
+                      <Icon source="credit-card-outline" size={18} color="#4B5563" />
+                    </View>
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        selectedNetworkFilter === null && styles.filterModalItemTitleSelected,
+                      ]}>
+                        All Networks
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        Show cards from all payment networks ({sourceCards.length})
+                      </Text>
+                    </View>
+                    {selectedNetworkFilter === null && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const isSelected = selectedNetworkFilter === item;
+                const netName = CARD_NETWORKS[item] || item;
+                const count = networkCardCounts[item] || 0;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.filterModalItemRow,
+                      isSelected && styles.filterModalItemRowSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedNetworkFilter(item);
+                      setNetworkFilterModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalNetworkBadge}>
+                      <Text style={styles.filterModalNetworkBadgeText} numberOfLines={1}>
+                        {item.length <= 5 ? item : item.slice(0, 4)}
+                      </Text>
+                    </View>
+                    <View style={styles.filterModalItemTextWrap}>
+                      <Text style={[
+                        styles.filterModalItemTitle,
+                        isSelected && styles.filterModalItemTitleSelected,
+                      ]}>
+                        {netName}
+                      </Text>
+                      <Text style={styles.filterModalItemSub}>
+                        {count} {count === 1 ? 'card' : 'cards'}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Icon source="check-circle" size={20} color="#111111" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.filterModalEmpty}>
+                  <Text style={styles.filterModalEmptyText}>
+                    {availableNetworks.length === 0
+                      ? 'No networks available to filter'
+                      : `No network matching "${networkFilterSearch}"`}
                   </Text>
                 </View>
               }
@@ -1166,13 +1368,101 @@ const Home: React.FC<Props> = ({ navigation }) => {
               ]}
               numberOfLines={1}
             >
-              {selectedBankFilter ? (BANK_DICTIONARY[selectedBankFilter] || selectedBankFilter) : 'Bank'}
+              {selectedBankFilter
+                ? `${BANK_DICTIONARY[selectedBankFilter] || selectedBankFilter} (${bankCardCounts[selectedBankFilter] || 0})`
+                : `Bank (${availableBanks.length})`}
             </Text>
             {selectedBankFilter ? (
               <TouchableOpacity
                 onPress={(e) => {
                   e.stopPropagation?.();
                   setSelectedBankFilter(null);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+              >
+                <Icon source="close-circle" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <Icon source="chevron-down" size={13} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+
+          {/* Network Filter Chip */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedNetworkFilter !== null && styles.filterChipActive,
+            ]}
+            onPress={() => {
+              setNetworkFilterSearch('');
+              setNetworkFilterModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source="credit-card-chip-outline"
+              size={13}
+              color={selectedNetworkFilter !== null ? '#FFFFFF' : '#4B5563'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedNetworkFilter !== null && styles.filterChipTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {selectedNetworkFilter
+                ? `${CARD_NETWORKS[selectedNetworkFilter] || selectedNetworkFilter} (${networkCardCounts[selectedNetworkFilter] || 0})`
+                : `Network (${availableNetworks.length})`}
+            </Text>
+            {selectedNetworkFilter ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedNetworkFilter(null);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+              >
+                <Icon source="close-circle" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <Icon source="chevron-down" size={13} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+
+          {/* Network Filter Chip */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedNetworkFilter !== null && styles.filterChipActive,
+            ]}
+            onPress={() => {
+              setNetworkFilterSearch('');
+              setNetworkFilterModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon
+              source="credit-card-chip-outline"
+              size={13}
+              color={selectedNetworkFilter !== null ? '#FFFFFF' : '#4B5563'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedNetworkFilter !== null && styles.filterChipTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {selectedNetworkFilter
+                ? `${CARD_NETWORKS[selectedNetworkFilter] || selectedNetworkFilter} (${networkCardCounts[selectedNetworkFilter] || 0})`
+                : `Network (${availableNetworks.length})`}
+            </Text>
+            {selectedNetworkFilter ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedNetworkFilter(null);
                 }}
                 hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
               >
@@ -1207,7 +1497,9 @@ const Home: React.FC<Props> = ({ navigation }) => {
               ]}
               numberOfLines={1}
             >
-              {selectedNameFilter || 'Name'}
+              {selectedNameFilter
+                ? `${selectedNameFilter} (${nameCardCounts[selectedNameFilter.trim()] || 0})`
+                : `Name (${availableNames.length})`}
             </Text>
             {selectedNameFilter ? (
               <TouchableOpacity
@@ -1316,17 +1608,18 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.emptySubtitle}>
                     {searchQuery.trim().length > 0
                       ? `No cards matched "${searchQuery.trim()}". Try a different search.`
-                      : (selectedBankFilter || selectedNameFilter || selectedTypeFilter !== 'ALL')
+                      : (selectedBankFilter || selectedNetworkFilter || selectedNameFilter || selectedTypeFilter !== 'ALL')
                       ? 'No cards match the selected filters.'
                       : 'Try clearing your filters.'}
                   </Text>
-                  {(searchQuery.trim().length > 0 || selectedTypeFilter !== 'ALL' || selectedBankFilter !== null || selectedNameFilter !== null) && (
+                  {(searchQuery.trim().length > 0 || selectedTypeFilter !== 'ALL' || selectedBankFilter !== null || selectedNetworkFilter !== null || selectedNameFilter !== null) && (
                     <TouchableOpacity
                       style={styles.emptyClearButton}
                       onPress={() => {
                         setSearchQuery('');
                         setSelectedTypeFilter('ALL');
                         setSelectedBankFilter(null);
+                        setSelectedNetworkFilter(null);
                         setSelectedNameFilter(null);
                       }}
                       activeOpacity={0.8}
@@ -2122,6 +2415,21 @@ const styles = StyleSheet.create({
   },
   filterModalBankLogo: {
     marginRight: 12,
+  },
+  filterModalNetworkBadge: {
+    width: 42,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  filterModalNetworkBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   filterModalNameAvatar: {
     width: 32,

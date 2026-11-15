@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, BackHandler } from 'react-native';
 import { Alert } from '../components/CustomAlert';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Dialog, FAB, Icon, Portal, Text } from 'react-native-paper';
@@ -44,6 +44,30 @@ const Groups: React.FC<Props> = ({ navigation }) => {
 
   const leavingRef = useRef(false);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (leaving || leavingRef.current) {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, leaving]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (leaveTarget) {
+        if (leaving || leavingRef.current) {
+          return true;
+        }
+        setLeaveTarget(null);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [leaveTarget, leaving]);
+
   const handleConfirmLeaveGroup = async () => {
     if (!leaveTarget || leaving || leavingRef.current) return;
     if (!isConnected) {
@@ -54,6 +78,8 @@ const Groups: React.FC<Props> = ({ navigation }) => {
       leavingRef.current = true;
       setLeaving(true);
       await leaveGroup(leaveTarget.groupId);
+      leavingRef.current = false;
+      setLeaving(false);
       setLeaveTarget(null);
     } catch (err: any) {
       Alert.alert('Could not leave group', err.message || 'Please try again.');
@@ -153,7 +179,8 @@ const Groups: React.FC<Props> = ({ navigation }) => {
       <Portal>
         <Dialog
           visible={Boolean(leaveTarget)}
-          onDismiss={() => { if (!leaving) setLeaveTarget(null); }}
+          dismissable={false}
+          onDismiss={() => { if (!leaving && !leavingRef.current) setLeaveTarget(null); }}
           style={styles.confirmDialog}
         >
           <View style={styles.confirmDialogContent}>
@@ -168,12 +195,12 @@ const Groups: React.FC<Props> = ({ navigation }) => {
             </Text>
             <View style={styles.confirmDialogActions}>
               <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => setLeaveTarget(null)}
+                style={[styles.confirmCancelBtn, leaving && { opacity: 0.4 }]}
+                onPress={() => { if (!leaving && !leavingRef.current) setLeaveTarget(null); }}
                 disabled={leaving}
                 activeOpacity={0.7}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={[styles.confirmCancelText, leaving && { color: '#9CA3AF' }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmActionBtn, { backgroundColor: '#DC2626' }, leaving && { opacity: 0.6 }]}
