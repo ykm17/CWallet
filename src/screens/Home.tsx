@@ -17,6 +17,7 @@ import { APP_NAME, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES } from '../constan
 import { getFirestore, collection, doc, addDoc, updateDoc, query, where, onSnapshot, serverTimestamp, getDocs } from '@react-native-firebase/firestore';
 import { encryptCardData } from '../util/Crypto';
 import { ConnectivityContext } from '../util/Connectivity';
+import { usePrivacy } from '../util/PrivacyContext';
 import { detectCardType } from '../util/Utils';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { parseCardDocument } from '../services/cardService';
@@ -45,6 +46,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const [cardToShare, setCardToShare] = useState<Card | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { isConnected } = useContext(ConnectivityContext);
+  const { isPrivacyMode, togglePrivacyMode } = usePrivacy();
   const { groups, loading: groupsLoading } = useUserGroups();
   const { cards: sharedCards, loading: sharedCardsLoading } = useAccessibleCards(groups, isConnected);
 
@@ -56,6 +58,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
   const getCardEffectiveType = (card: Card): string => {
     if (card.cardType) return card.cardType.toUpperCase();
+    if (card.bankName === 'PX') return 'PREPAID';
     const detected = detectCardType(card.name);
     if (detected) return detected.toUpperCase();
     if (card.limit && Number(card.limit.replace(/\D/g, '')) > 0) return 'CREDIT';
@@ -102,6 +105,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
     return (
       card.ownerName.toLowerCase().includes(query) ||
       bankName.includes(query) ||
+      (card.bankName === 'PX' && 'sodexo'.includes(query)) ||
       card.number.includes(query) ||
       card.month.includes(query) ||
       card.year.includes(query) ||
@@ -568,29 +572,59 @@ const Home: React.FC<Props> = ({ navigation }) => {
             </View>
           ) : (
             <>
-              <TouchableOpacity
-                style={styles.topBarLeft}
-                onPress={() => navigation.navigate('Profile')}
-                activeOpacity={0.7}
-                accessibilityLabel="Open profile"
-              >
-                <View style={styles.avatarWrap}>
-                  {photoUrl ? (
-                    <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarInitial}>{initial}</Text>
-                    </View>
-                  )}
-                  <View style={[styles.avatarStatusDot, isConnected ? styles.dotOnline : styles.dotOffline]} />
-                </View>
+              <View style={styles.topBarLeft}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Profile')}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Open profile"
+                >
+                  <View style={styles.avatarWrap}>
+                    {photoUrl ? (
+                      <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitial}>{initial}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.avatarStatusDot, isConnected ? styles.dotOnline : styles.dotOffline]} />
+                  </View>
+                </TouchableOpacity>
+
                 <View style={styles.userInfoWrap}>
-                  <Text style={styles.appTitleText}>{APP_NAME}</Text>
-                  <Text style={styles.userNameText} numberOfLines={1}>
-                    {displayName}
-                  </Text>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('Profile')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.appTitleText}>{APP_NAME}</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.userNameRow}>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('Profile')}
+                      activeOpacity={0.7}
+                      style={{ flexShrink: 1 }}
+                    >
+                      <Text style={styles.userNameText} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.privacyToggleBtn}
+                      onPress={togglePrivacyMode}
+                      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                      activeOpacity={0.6}
+                      accessibilityLabel={isPrivacyMode ? 'Disable privacy mode' : 'Enable privacy mode'}
+                    >
+                      <Icon
+                        source={isPrivacyMode ? 'eye-off' : 'eye'}
+                        size={17}
+                        color={isPrivacyMode ? '#2563EB' : '#71717A'}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </TouchableOpacity>
+              </View>
 
               <View style={styles.topBarRight}>
                 <View style={[styles.statusBadge, isConnected ? styles.statusBadgeOnline : styles.statusBadgeOffline]}>
@@ -1050,6 +1084,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111111',
     letterSpacing: -0.3,
+  },
+  userNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  privacyToggleBtn: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarRight: {
     flexDirection: 'row',

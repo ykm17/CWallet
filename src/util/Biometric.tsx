@@ -24,10 +24,10 @@ export const getBiometricDetails = async (): Promise<{ available: boolean; biome
     }
 };
 
-export const authenticateWithBiometrics = async (): Promise<boolean> => {
+export const authenticateWithBiometrics = async (promptMessage?: string): Promise<boolean> => {
     try {
         const { success } = await rnBiometrics.simplePrompt({
-            promptMessage: `Authenticate to access ${APP_NAME}`,
+            promptMessage: promptMessage || `Authenticate to access ${APP_NAME}`,
             cancelButtonText: 'Cancel'
         });
         console.log('Biometric authentication result:', success);

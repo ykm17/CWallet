@@ -114,6 +114,14 @@ describe('CardParser tests', () => {
     it('identifies Axis bank', () => {
       expect(extractBankName('AXIS BANK NEO')).toBe('AX');
     });
+
+    it('identifies Pluxee card', () => {
+      expect(extractBankName('PLUXEE MEAL CARD')).toBe('PX');
+    });
+
+    it('identifies Sodexo as Pluxee', () => {
+      expect(extractBankName('SODEXO BENEFITS')).toBe('PX');
+    });
   });
 
   describe('extractNetwork', () => {
@@ -141,6 +149,11 @@ describe('CardParser tests', () => {
 
     it('identifies CREDIT card', () => {
       expect(extractCardType('SIGNATURE CREDIT CARD')).toBe('CREDIT');
+    });
+
+    it('identifies PREPAID / MEAL card', () => {
+      expect(extractCardType('PLUXEE MEAL CARD')).toBe('PREPAID');
+      expect(extractCardType('PREPAID CARD')).toBe('PREPAID');
     });
   });
 

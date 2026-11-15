@@ -88,6 +88,7 @@ const BANK_KEYWORD_MAP: Array<{ keywords: string[]; bankKey: string }> = [
   { keywords: ['INDIAN OVERSEAS', 'IOB'], bankKey: 'IO' },
   { keywords: ['PUNJAB & SIND', 'PUNJAB AND SIND'], bankKey: 'PS' },
   { keywords: ['JAMMU & KASHMIR', 'J&K BANK', 'JK BANK'], bankKey: 'JK' },
+  { keywords: ['PLUXEE', 'SODEXO'], bankKey: 'PX' },
 ];
 
 // Words to exclude when extracting cardholder name (banking terms, tiers, brands, disclaimers, grammatical fillers)
@@ -98,6 +99,8 @@ const NAME_EXCLUSIONS = new Set([
   'DEBIT', 'CREDIT', 'CARD', 'CARDS', 'PREPAID', 'FOREX', 'ATM', 'CHIP', 'SMART', 'ELECTRON', 'ELECTRONIC',
   'BANK', 'BANKING', 'FINANCE', 'FINANCIAL', 'FIN', 'CUSTOMER', 'CARE', 'HELPLINE', 'HELP', 'SUPPORT',
   'ACCOUNT', 'SERVICE', 'SERVICES', 'BRANCH', 'OFFICE', 'INDIA',
+  // Brand / Products
+  'PLUXEE', 'SODEXO',
   // Tiers & Variants
   'BUSINESS', 'CORPORATE', 'COMMERCIAL', 'ENTERPRISE', 'PLATINUM', 'GOLD', 'SILVER', 'TITANIUM', 'DIAMOND',
   'SIGNATURE', 'INFINITE', 'WORLD', 'ELITE', 'CLASSIC', 'PREMIER', 'PREMIUM', 'PRIVILEGE', 'SELECT',
@@ -307,6 +310,7 @@ export const extractNetwork = (text: string, cardNumber?: string): string | unde
  */
 export const extractCardType = (text: string): string | undefined => {
   const upper = text.toUpperCase();
+  if (/\b(?:PREPAID|BENEFIT|BENEFITS|MEAL)\b/i.test(upper)) return 'PREPAID';
   if (/\bDEBIT\b/i.test(upper) && !/\bCREDIT\b/i.test(upper)) return 'DEBIT';
   if (/\bCREDIT\b/i.test(upper) && !/\bDEBIT\b/i.test(upper)) return 'CREDIT';
   return undefined;

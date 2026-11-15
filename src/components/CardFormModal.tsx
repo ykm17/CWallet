@@ -137,7 +137,11 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     }
     return allKeys.filter(key => {
       const name = BANK_DICTIONARY[key]?.toLowerCase() || '';
-      return name.includes(q) || key.toLowerCase().includes(q);
+      return (
+        name.includes(q) ||
+        key.toLowerCase().includes(q) ||
+        (key === 'PX' && 'sodexo'.includes(q))
+      );
     });
   }, [bankSearchQuery]);
 
@@ -299,6 +303,10 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     }
   };
 
+  const isDebitOrPluxee = useMemo(() => {
+    return card.cardType === 'DEBIT' || card.cardType === 'PREPAID' || card.bankName === 'PX';
+  }, [card.cardType, card.bankName]);
+
   const errors = useMemo(() => {
     const errs: Record<string, string> = {};
 
@@ -330,12 +338,14 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     if (isEmpty(card.name.trim())) {
       errs.name = 'Card name cannot be empty';
     }
-    if (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) {
-      errs.limit = 'Card limit is empty or invalid';
+    if (!isDebitOrPluxee) {
+      if (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) {
+        errs.limit = 'Card limit is empty or invalid';
+      }
     }
 
     return errs;
-  }, [card]);
+  }, [card, isDebitOrPluxee]);
 
   const isFormValid = useMemo(() => {
     return Object.keys(errors).length === 0;
@@ -350,7 +360,11 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
     try {
       submittingRef.current = true;
       setSubmitting(true);
-      await onSubmit({ ...cardRef.current });
+      const shouldClearLimit = cardRef.current.cardType === 'DEBIT' || cardRef.current.cardType === 'PREPAID' || cardRef.current.bankName === 'PX';
+      await onSubmit({
+        ...cardRef.current,
+        limit: shouldClearLimit ? '' : cardRef.current.limit,
+      });
     } catch (err) {
       console.error('Error submitting form:', err);
     } finally {
@@ -585,7 +599,15 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                   <Menu.Item
                     onPress={() => {
                       cardRef.current.cardType = key;
-                      setCard(prev => ({ ...prev, cardType: key }));
+                      const isNowDebitOrPluxee = key === 'DEBIT' || key === 'PREPAID' || card.bankName === 'PX';
+                      if (isNowDebitOrPluxee) {
+                        cardRef.current.limit = '';
+                      }
+                      setCard(prev => ({
+                        ...prev,
+                        cardType: key,
+                        limit: isNowDebitOrPluxee ? '' : prev.limit,
+                      }));
                       closeTypeMenu();
                     }}
                     title={CARD_TYPES[key]}
@@ -805,34 +827,38 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
             </HelperText>
           )}
 
-          {/* Credit Limit */}
-          <TextInput
-            key={`limit-${formKey}`}
-            label="Credit limit"
-            placeholder="e.g. 100000"
-            defaultValue={card.limit}
-            onChangeText={text => {
-              const cleaned = text.replace(/[^0-9]/g, '');
-              cardRef.current.limit = cleaned;
-              setCard(prev => ({ ...prev, limit: cleaned }));
-            }}
-            maxLength={12}
-            keyboardType="numeric"
-            mode="outlined"
-            outlineColor={touched.limit && errors.limit ? '#DC2626' : '#E5E7EB'}
-            activeOutlineColor="#111111"
-            textColor="#111111"
-            placeholderTextColor="#9CA3AF"
-            outlineStyle={styles.inputOutline}
-            theme={inputTheme}
-            left={<TextInput.Icon icon="cash" size={20} color="#6B7280" />}
-            onBlur={() => handleBlur('limit')}
-            style={styles.textInput}
-          />
-          {touched.limit && errors.limit && (
-            <HelperText type="error" visible={true} style={styles.helperText}>
-              {errors.limit}
-            </HelperText>
+          {/* Credit Limit - Hidden for Debit cards and Pluxee */}
+          {!isDebitOrPluxee && (
+            <>
+              <TextInput
+                key={`limit-${formKey}`}
+                label="Credit limit"
+                placeholder="e.g. 100000"
+                defaultValue={card.limit}
+                onChangeText={text => {
+                  const cleaned = text.replace(/[^0-9]/g, '');
+                  cardRef.current.limit = cleaned;
+                  setCard(prev => ({ ...prev, limit: cleaned }));
+                }}
+                maxLength={12}
+                keyboardType="numeric"
+                mode="outlined"
+                outlineColor={touched.limit && errors.limit ? '#DC2626' : '#E5E7EB'}
+                activeOutlineColor="#111111"
+                textColor="#111111"
+                placeholderTextColor="#9CA3AF"
+                outlineStyle={styles.inputOutline}
+                theme={inputTheme}
+                left={<TextInput.Icon icon="cash" size={20} color="#6B7280" />}
+                onBlur={() => handleBlur('limit')}
+                style={styles.textInput}
+              />
+              {touched.limit && errors.limit && (
+                <HelperText type="error" visible={true} style={styles.helperText}>
+                  {errors.limit}
+                </HelperText>
+              )}
+            </>
           )}
 
           {/* Action Buttons: Cancel and Save Card */}
@@ -1077,7 +1103,20 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 style={[styles.bankItemRow, isSelected && styles.bankItemRowSelected]}
                 onPress={() => {
                   cardRef.current.bankName = item;
-                  setCard(prev => ({ ...prev, bankName: item }));
+                  const isPX = item === 'PX';
+                  const isNowDebitOrPluxee = card.cardType === 'DEBIT' || card.cardType === 'PREPAID' || isPX;
+                  if (isNowDebitOrPluxee) {
+                    cardRef.current.limit = '';
+                    if (isPX && (!cardRef.current.cardType || cardRef.current.cardType === 'CREDIT')) {
+                      cardRef.current.cardType = 'PREPAID';
+                    }
+                  }
+                  setCard(prev => ({
+                    ...prev,
+                    bankName: item,
+                    limit: isNowDebitOrPluxee ? '' : prev.limit,
+                    cardType: (isPX && (!prev.cardType || prev.cardType === 'CREDIT')) ? 'PREPAID' : prev.cardType,
+                  }));
                   setBankPickerVisible(false);
                   setBankSearchQuery('');
                 }}

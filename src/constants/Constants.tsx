@@ -40,6 +40,7 @@ export const BANK_DICTIONARY: BankDictionary = {
     IO: "Indian Overseas",
     PS: "Punjab & Sind",
     JK: "J&K",
+    PX: "Pluxee",
     OT: "Other",
 };
 
@@ -77,6 +78,7 @@ export const BANK_COLORS: BankDictionary = {
     IO: "#003366", // Indian Overseas - Navy
     PS: "#D71920", // Punjab & Sind - Red
     JK: "#1A365D", // J&K - Deep Blue
+    PX: "#004842", // Pluxee - Dark Teal Green
     OT: "#2D3748", // Other - Slate Grey
 };
 
@@ -92,6 +94,7 @@ export const CARD_NETWORKS: { [key: string]: string } = {
 export const CARD_TYPES: { [key: string]: string } = {
     CREDIT: "Credit",
     DEBIT: "Debit",
+    PREPAID: "Prepaid",
 };
 
 

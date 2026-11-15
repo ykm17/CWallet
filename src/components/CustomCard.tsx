@@ -3,11 +3,12 @@ import React, { useContext, useState, useRef } from 'react'
 import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { convertLongNumberToText, formatCardLimit, removeSpaceFromString } from '../util/Utils'
+import { convertLongNumberToText, formatCardLimit, maskCardNumber, removeSpaceFromString } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
 import auth from '@react-native-firebase/auth';
 import { ConnectivityContext } from '../util/Connectivity'
+import { usePrivacy } from '../util/PrivacyContext'
 import { deleteOwnedCard } from '../services/cardService'
 import { showCardOverlay } from '../services/cardOverlayService'
 
@@ -38,6 +39,7 @@ const CustomCard: React.FC<CardProps> = ({
   const [sharedGroupsVisible, setSharedGroupsVisible] = useState(false);
   const [copiedField, setCopiedField] = useState<'number' | 'card' | null>(null);
   const isConnected = useContext(ConnectivityContext).isConnected;
+  const { isPrivacyMode } = usePrivacy();
 
   const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
@@ -121,6 +123,9 @@ const CustomCard: React.FC<CardProps> = ({
     : '';
   const badgeLabel = [networkLabel, cardTypeLabel].filter(Boolean).join(' • ');
 
+  const isDebitOrPluxee = cardDetails.cardType === 'DEBIT' || cardDetails.cardType === 'PREPAID' || cardDetails.bankName === 'PX';
+  const limitFormatted = isDebitOrPluxee ? '' : formatCardLimit(cardDetails.limit);
+
   const getCardCopyText = () => {
     const lines = [
       `Bank Name: ${BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName}`,
@@ -131,11 +136,10 @@ const CustomCard: React.FC<CardProps> = ({
       `Card No: ${cardDetails.number}`,
       `Exp: ${cardDetails.month}/${cardDetails.year}`,
       `Cvv: ${cardDetails.cvv}`,
+      (!isDebitOrPluxee && cardDetails.limit) ? `Limit: ${cardDetails.limit}` : null,
     ].filter(Boolean);
     return lines.join('\n');
   };
-
-  const limitFormatted = formatCardLimit(cardDetails.limit);
 
   const groupNames = (cardDetails.accessGroupNames && cardDetails.accessGroupNames.length > 0)
     ? cardDetails.accessGroupNames
@@ -259,7 +263,9 @@ const CustomCard: React.FC<CardProps> = ({
           {limitFormatted ? (
             <View style={styles.limitContainer}>
               <Text style={styles.cardMicroLabel}>LIMIT</Text>
-              <Text style={styles.limitValueText}>{limitFormatted}</Text>
+              <Text style={styles.limitValueText}>
+                {isPrivacyMode ? '••••••' : limitFormatted}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -268,7 +274,7 @@ const CustomCard: React.FC<CardProps> = ({
         <View style={styles.cardNumberRow}>
           <TouchableWithoutFeedback onLongPress={copyNumber}>
             <Text style={styles.cardNumberText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-              {cardDetails.number}
+              {isPrivacyMode ? maskCardNumber(cardDetails.number) : cardDetails.number}
             </Text>
           </TouchableWithoutFeedback>
           <TouchableOpacity
@@ -299,11 +305,15 @@ const CustomCard: React.FC<CardProps> = ({
           <View style={styles.expiryCvvSection}>
             <View style={styles.expiryCol}>
               <Text style={styles.cardMicroLabel}>EXPIRES</Text>
-              <Text style={styles.cardDetailValText}>{cardDetails.month}/{cardDetails.year}</Text>
+              <Text style={styles.cardDetailValText}>
+                {isPrivacyMode ? '••/••' : `${cardDetails.month}/${cardDetails.year}`}
+              </Text>
             </View>
             <View style={styles.cvvCol}>
               <Text style={styles.cardMicroLabel}>CVV</Text>
-              <Text style={styles.cardDetailValText}>{cardDetails.cvv}</Text>
+              <Text style={styles.cardDetailValText}>
+                {isPrivacyMode ? '•••' : cardDetails.cvv}
+              </Text>
             </View>
           </View>
 
@@ -542,7 +552,7 @@ const CustomCard: React.FC<CardProps> = ({
                   ) : null}
                 </View>
                 <Text style={styles.deleteCardPreviewNumber}>
-                  {cardDetails.number}
+                  {isPrivacyMode ? maskCardNumber(cardDetails.number) : cardDetails.number}
                 </Text>
                 <Text style={styles.deleteCardPreviewOwner} numberOfLines={1}>
                   {cardDetails.ownerName}

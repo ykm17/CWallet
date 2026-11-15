@@ -30,6 +30,25 @@ export const formatCardNumber = (number: string): string => {
         .trim();
 };
 
+export const maskCardNumber = (number: string): string => {
+    if (!number) return '••••';
+    const clean = number.replace(/\D/g, '');
+    if (clean.length <= 4) return clean;
+    const last4 = clean.slice(-4);
+
+    // Diners (14 digits: 4-6-4)
+    if (/^(30[0-5]|3095|36|38|39)/.test(clean) || clean.length === 14) {
+        return `•••• •••••• ${last4}`;
+    }
+
+    // Amex (15 digits: 4-6-5)
+    if (/^(34|37)/.test(clean) || clean.length === 15) {
+        return `•••• •••••• •${last4}`;
+    }
+
+    // Standard cards (16 digits: 4-4-4-4)
+    return `•••• •••• •••• ${last4}`;
+};
 
 export const removeSpaceFromString = (inputString: string): string => {
     return inputString.replace(/\s+/g, '');
@@ -57,6 +76,7 @@ export const detectCardNetwork = (pan: string, label: string = ''): string => {
 
 export const detectCardType = (label: string = ''): string => {
     const upperLabel = label.toUpperCase();
+    if (upperLabel.includes('PREPAID') || upperLabel.includes('BENEFIT') || upperLabel.includes('MEAL')) return 'PREPAID';
     if (upperLabel.includes('DEBIT')) return 'DEBIT';
     if (upperLabel.includes('CREDIT')) return 'CREDIT';
     return '';

@@ -13,6 +13,7 @@ import ShareToGroup from './screens/ShareToGroup';
 import UnshareFromGroup from './screens/UnshareFromGroup';
 import { enableSecureView, disableSecureView, forbidAndroidShare, allowAndroidShare } from 'react-native-prevent-screenshot-ios-android';
 import { ConnectivityProvider } from './util/Connectivity';
+import { PrivacyProvider } from './util/PrivacyContext';
 import CustomAlertHost from './components/CustomAlert';
 import { hideCardOverlay } from './services/cardOverlayService';
 
@@ -57,48 +58,50 @@ const App = () => {
   return (
     <SafeAreaProvider>
       <ConnectivityProvider>
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName="Login"
-            screenOptions={{
-              headerStyle: { backgroundColor: '#F4F5F7' },
-              headerShadowVisible: false,
-              headerTitleAlign: 'center',
-              headerTitleStyle: {
-                fontWeight: '700',
-                fontSize: 17,
-                color: '#111111',
-              },
-              headerTintColor: '#111111',
-              statusBarColor: '#F4F5F7',
-              statusBarStyle: 'dark',
-            }}
-          >
-            <Stack.Screen
-              name="Home"
-              component={Home}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
+        <PrivacyProvider>
+          <NavigationContainer>
+            <Stack.Navigator
+              initialRouteName="Login"
+              screenOptions={{
+                headerStyle: { backgroundColor: '#F4F5F7' },
+                headerShadowVisible: false,
+                headerTitleAlign: 'center',
+                headerTitleStyle: {
+                  fontWeight: '700',
+                  fontSize: 17,
+                  color: '#111111',
+                },
+                headerTintColor: '#111111',
+                statusBarColor: '#F4F5F7',
+                statusBarStyle: 'dark',
               }}
-            />
-            <Stack.Screen name="Groups" component={Groups} />
-            <Stack.Screen name="Profile" component={Profile} options={{ title: 'Profile' }} />
-            <Stack.Screen name="GroupForm" component={GroupForm} />
-            <Stack.Screen name="GroupDetails" component={GroupDetails} />
-            <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
-            <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
-            <Stack.Screen
-              name="Login"
-              component={Login}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
-              }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <CustomAlertHost />
+            >
+              <Stack.Screen
+                name="Home"
+                component={Home}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen name="Groups" component={Groups} />
+              <Stack.Screen name="Profile" component={Profile} options={{ title: 'Profile' }} />
+              <Stack.Screen name="GroupForm" component={GroupForm} />
+              <Stack.Screen name="GroupDetails" component={GroupDetails} />
+              <Stack.Screen name="ShareToGroup" component={ShareToGroup} />
+              <Stack.Screen name="UnshareFromGroup" component={UnshareFromGroup} />
+              <Stack.Screen
+                name="Login"
+                component={Login}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                }}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <CustomAlertHost />
+        </PrivacyProvider>
       </ConnectivityProvider>
     </SafeAreaProvider>
   );
