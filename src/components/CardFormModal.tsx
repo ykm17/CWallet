@@ -30,6 +30,7 @@ import { formatCardNumber, detectCardNetwork, detectCardType } from '../util/Uti
 import { isNfcSupported, isNfcEnabled, goToNfcSettings, scanCardWithNfc, cancelNfcScan, NfcScanStage } from '../util/NfcCardReader';
 import { scanPaymentCard } from '../services/cardScannerService';
 import { ConnectivityContext } from '../util/Connectivity';
+import BankLogo from './BankLogo';
 
 interface CardFormModalProps {
   visible: boolean;
@@ -507,8 +508,8 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
               activeOpacity={0.8}
             >
               <View style={styles.selectorFieldLeft}>
-                {card.bankName && BANK_COLORS[card.bankName] ? (
-                  <View style={[styles.bankColorDot, { backgroundColor: BANK_COLORS[card.bankName] }]} />
+                {card.bankName ? (
+                  <BankLogo bankKey={card.bankName} size={24} style={styles.selectorBankLogo} />
                 ) : (
                   <Icon source="bank-outline" size={20} color="#6B7280" />
                 )}
@@ -1122,7 +1123,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={[styles.bankItemDot, { backgroundColor: color }]} />
+                <BankLogo bankKey={item} size={32} style={styles.bankItemLogo} />
                 <Text style={[styles.bankItemText, isSelected && styles.bankItemTextSelected]}>
                   {name}
                 </Text>
@@ -1486,6 +1487,9 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
   },
+  selectorBankLogo: {
+    marginRight: 8,
+  },
   nfcModalContent: {
     backgroundColor: '#FFFFFF',
     padding: 20,
@@ -1667,6 +1671,9 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+    marginRight: 12,
+  },
+  bankItemLogo: {
     marginRight: 12,
   },
   bankItemText: {

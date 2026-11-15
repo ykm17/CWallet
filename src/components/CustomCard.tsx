@@ -11,6 +11,7 @@ import { ConnectivityContext } from '../util/Connectivity'
 import { usePrivacy } from '../util/PrivacyContext'
 import { deleteOwnedCard } from '../services/cardService'
 import { showCardOverlay } from '../services/cardOverlayService'
+import BankLogo from './BankLogo'
 
 interface CardProps {
   cardDetails: Card,
@@ -182,9 +183,12 @@ const CustomCard: React.FC<CardProps> = ({
         {/* Row 1: Bank Name & Brand / Tier Tags (Left) + Action Pill (Right) */}
         <View style={styles.headerRow}>
           <View style={styles.bankInfoContainer}>
-            <Text style={styles.bankNameText} numberOfLines={1}>
-              {BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName || 'BANK CARD'}
-            </Text>
+            <View style={styles.bankHeaderRow}>
+              <BankLogo bankKey={cardDetails.bankName} size={22} withCardBadge style={{ marginRight: 8 }} />
+              <Text style={styles.bankNameText} numberOfLines={1}>
+                {BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName || 'BANK CARD'}
+              </Text>
+            </View>
             <View style={styles.badgeRow}>
               {showYourCardLabel && isOwner ? (
                 <View style={styles.yourCardBadge}>
@@ -644,7 +648,12 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  bankHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   bankNameText: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 13.5,
     fontWeight: '700',
