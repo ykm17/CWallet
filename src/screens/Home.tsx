@@ -1,6 +1,6 @@
 import { View, StyleSheet, TouchableOpacity, FlatList, BackHandler, ActivityIndicator, RefreshControl, Image, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Alert } from '../components/CustomAlert';
 import CustomCard from '../components/CustomCard';
 import CardFormModal from '../components/CardFormModal';
@@ -101,10 +101,36 @@ const Home: React.FC<Props> = ({ navigation }) => {
     return sortCardsByLatest(list);
   }, [cardData, groupNameById]);
 
+  const isCardShared = useCallback((card: Card): boolean => {
+    const hasGroups = Array.isArray(card.sharedGroupIds) && card.sharedGroupIds.length > 0;
+    const hasUsers = Array.isArray(card.sharedWithUsers) && card.sharedWithUsers.length > 0;
+    const hasEmails = Array.isArray(card.sharedEmails) && card.sharedEmails.length > 0;
+    const hasUserIds = Array.isArray(card.sharedUserIds) && card.sharedUserIds.length > 0;
+    return hasGroups || hasUsers || hasEmails || hasUserIds;
+  }, []);
+
+  const allSharedCards = useMemo<Card[]>(() => {
+    const combined = new Map<string, Card>();
+
+    // 1. Cards shared WITH the current user by others
+    sharedCards.forEach((c) => {
+      combined.set(c.key, c);
+    });
+
+    // 2. Cards owned by current user that have been shared (to a friend directly, or to a group, or both)
+    personalCardsWithGroups.forEach((card) => {
+      if (isCardShared(card)) {
+        combined.set(card.key, card);
+      }
+    });
+
+    return sortCardsByLatest(Array.from(combined.values()));
+  }, [sharedCards, personalCardsWithGroups, isCardShared]);
+
   const sourceCards: Card[] = useMemo(() => {
-    const list = isCardPersonal === 'PRL' ? personalCardsWithGroups : sharedCards;
+    const list = isCardPersonal === 'PRL' ? personalCardsWithGroups : allSharedCards;
     return sortCardsByLatest(list);
-  }, [isCardPersonal, personalCardsWithGroups, sharedCards]);
+  }, [isCardPersonal, personalCardsWithGroups, allSharedCards]);
 
   const creditCardsCount = useMemo(() => {
     return sourceCards.filter((card) => getCardEffectiveType(card) === 'CREDIT').length;
@@ -1519,19 +1545,22 @@ const Home: React.FC<Props> = ({ navigation }) => {
 
         <FlatList
           data={displayedCards}
-          renderItem={({ item }) => (
-            <CustomCard
-              cardDetails={item}
-              onCardLongPress={selectionMode ? toggleCardSelection : (isConnected ? showModal : undefined)}
-              onCardEdit={isConnected ? showModal : undefined}
-              onShare={isCardPersonal === 'PRL' && isConnected ? handleShareCard : undefined}
-              onUnshare={isCardPersonal === 'PRL' && isConnected ? handleUnshareCard : undefined}
-              selectionMode={selectionMode && isCardPersonal === 'PRL'}
-              isSelected={selectedCardIds.includes(item.key)}
-              onToggleSelect={toggleCardSelection}
-              showYourCardLabel={isCardPersonal === 'GRP'}
-            />
-          )}
+          renderItem={({ item }) => {
+            const isOwnedCard = item.ownerId === currentUser?.uid || item.email === currentUser?.email;
+            return (
+              <CustomCard
+                cardDetails={item}
+                onCardLongPress={selectionMode ? toggleCardSelection : (isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? showModal : undefined)}
+                onCardEdit={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? showModal : undefined}
+                onShare={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? handleShareCard : undefined}
+                onUnshare={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? handleUnshareCard : undefined}
+                selectionMode={selectionMode && isCardPersonal === 'PRL'}
+                isSelected={selectedCardIds.includes(item.key)}
+                onToggleSelect={toggleCardSelection}
+                showYourCardLabel={isCardPersonal === 'GRP'}
+              />
+            );
+          }}
           keyExtractor={(item, index) => item.key || index.toString()}
           style={{ flex: 1, marginBottom: 0 }}
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 }}
@@ -1570,7 +1599,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.emptySubtitle}>
                     {isCardPersonal === 'PRL'
                       ? 'Add your credit or debit cards to securely manage and share them.'
-                      : 'Cards shared with groups you belong to will appear here.'}
+                      : 'Cards shared with you or cards you share with friends and groups will appear here.'}
                   </Text>
                   {isCardPersonal === 'PRL' && isConnected && (
                     <TouchableOpacity
@@ -1725,7 +1754,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
               </Text>
               <View style={[styles.bottomTabBadge, isCardPersonal === 'GRP' ? styles.bottomTabBadgeActive : styles.bottomTabBadgeInactive]}>
                 <Text style={[styles.bottomTabBadgeText, isCardPersonal === 'GRP' ? styles.bottomTabBadgeTextActive : styles.bottomTabBadgeTextInactive]}>
-                  {sharedCards.length}
+                  {allSharedCards.length}
                 </Text>
               </View>
             </TouchableOpacity>

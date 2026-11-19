@@ -1,5 +1,5 @@
 import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator, Platform } from 'react-native'
-import React, { useContext, useState, useRef } from 'react'
+import React, { useContext, useState, useRef, useMemo } from 'react'
 import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
@@ -154,13 +154,56 @@ const CustomCard: React.FC<CardProps> = ({
     : (cardDetails.sharedGroupIds || []).map((_, i) => `Group ${i + 1}`);
 
   const sharedGroupCount = cardDetails.sharedGroupIds?.length || 0;
-  const sharedPeople = cardDetails.sharedWithUsers || [];
+
+  const sharedPeople = useMemo(() => {
+    const list = [...(cardDetails.sharedWithUsers || [])];
+    const existingEmails = new Set(list.map((p) => p.email?.toLowerCase()).filter(Boolean));
+    if (Array.isArray(cardDetails.sharedEmails)) {
+      cardDetails.sharedEmails.forEach((email) => {
+        if (email && !existingEmails.has(email.toLowerCase())) {
+          existingEmails.add(email.toLowerCase());
+          list.push({ email });
+        }
+      });
+    }
+    return list;
+  }, [cardDetails.sharedWithUsers, cardDetails.sharedEmails]);
+
   const sharedPeopleCount = sharedPeople.length;
   const totalSharedCount = sharedGroupCount + sharedPeopleCount;
 
   const accessGroups = cardDetails.accessGroupNames || [];
   const accessUsers = cardDetails.accessUserNames || [];
   const recipientSourcesCount = accessGroups.length + accessUsers.length;
+
+  const sharedBadgeLabel = useMemo(() => {
+    if (!isOwner) {
+      if (recipientSourcesCount === 1) {
+        const sourceName = accessGroups[0] || accessUsers[0] || cardDetails.ownerName || '';
+        return sourceName ? `via ${sourceName}` : 'via 1';
+      }
+      return `via (${recipientSourcesCount || 1})`;
+    }
+
+    if (totalSharedCount === 1) {
+      if (groupNames.length === 1) {
+        return `Shared: ${groupNames[0]}`;
+      }
+      if (sharedPeople.length === 1) {
+        const person = sharedPeople[0];
+        const name = person.displayName || (person.email ? person.email.split('@')[0] : 'Friend');
+        return `Shared: ${name}`;
+      }
+    }
+    return `Shared (${totalSharedCount})`;
+  }, [isOwner, recipientSourcesCount, accessGroups, accessUsers, cardDetails.ownerName, totalSharedCount, groupNames, sharedPeople]);
+
+  const sharedBadgeIcon = useMemo(() => {
+    if (!isOwner) return 'share-variant';
+    if (sharedGroupCount > 0 && sharedPeople.length > 0) return 'account-multiple';
+    if (sharedGroupCount > 0) return 'account-group';
+    return 'account';
+  }, [isOwner, sharedGroupCount, sharedPeople.length]);
 
   const hasLeftElement = isOwner
     ? totalSharedCount > 0
@@ -346,8 +389,10 @@ const CustomCard: React.FC<CardProps> = ({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Icon source="account-group" size={11.5} color="rgba(255, 255, 255, 0.9)" />
-                <Text style={styles.sharedBadgeText}>Shared ({totalSharedCount})</Text>
+                <Icon source={sharedBadgeIcon} size={11.5} color="rgba(255, 255, 255, 0.9)" />
+                <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
+                  {sharedBadgeLabel}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -357,8 +402,8 @@ const CustomCard: React.FC<CardProps> = ({
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Icon source="share-variant" size={11} color="rgba(255, 255, 255, 0.9)" />
-                <Text style={styles.sharedBadgeText}>
-                  via ({recipientSourcesCount || 1})
+                <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
+                  {sharedBadgeLabel}
                 </Text>
               </TouchableOpacity>
             )
@@ -396,11 +441,11 @@ const CustomCard: React.FC<CardProps> = ({
             <View style={styles.groupsDialogBody}>
               <View style={styles.groupsDialogHeader}>
                 <View style={styles.groupsDialogIconContainer}>
-                  <Icon source={isOwner ? "account-group" : "share-variant"} size={20} color="#111111" />
+                  <Icon source={isOwner ? sharedBadgeIcon : "share-variant"} size={20} color="#111111" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.groupsDialogTitle}>
-                    {isOwner ? "Shared Groups" : "Card Shared Via"}
+                    {isOwner ? "Card Sharing Details" : "Card Shared Via"}
                   </Text>
                   <Text style={styles.groupsDialogSubtitle} numberOfLines={1}>
                     {cardDetails.ownerName ? `${cardDetails.ownerName} • ` : ''}{BANK_DICTIONARY[cardDetails.bankName] || cardDetails.bankName || 'Card'}
@@ -885,6 +930,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 10,
+    maxWidth: '65%',
   },
   sharedBadgeText: {
     color: 'rgba(255, 255, 255, 0.95)',

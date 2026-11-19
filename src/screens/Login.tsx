@@ -110,7 +110,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
               setUserEmail(parsed.email || null);
               setCheckingAuth(false);
             }
-          } catch (_) {}
+          } catch (_) { }
         }
       })
       .catch((err) => console.log('Error checking cached auth:', err));
@@ -137,7 +137,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
               return;
             }
           }
-        } catch (_) {}
+        } catch (_) { }
 
         if (isMounted) {
           setIsAlreadyLoggedIn(false);
@@ -231,9 +231,11 @@ const Login: React.FC<Props> = ({ navigation }) => {
           routes: [{ name: 'Home' }],
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google Sign-In Error:', error);
-      setErrorMessage('Error signing in. Please try again.');
+      const detailedMessage =
+        error?.code || error?.message || (typeof error === 'string' ? error : 'Error signing in. Please try again.');
+      setErrorMessage(`Sign-in failed: ${detailedMessage}`);
       setVisible(true);
     } finally {
       setLoginDisabled(false);
@@ -247,7 +249,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
       await auth().signOut();
       try {
         await GoogleSignin.signOut();
-      } catch (_) {}
+      } catch (_) { }
       await clearCachedAuthSession();
       setIsAlreadyLoggedIn(false);
       setUserEmail(null);
@@ -264,8 +266,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
     biometryType === 'FaceID'
       ? 'Unlock with Face ID'
       : biometryType === 'TouchID'
-      ? 'Unlock with Touch ID'
-      : 'Unlock with Biometrics';
+        ? 'Unlock with Touch ID'
+        : 'Unlock with Biometrics';
 
   const biometricIconName =
     biometryType === 'FaceID' ? 'face-recognition' : 'fingerprint';
