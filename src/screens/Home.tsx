@@ -59,7 +59,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const { isConnected } = useContext(ConnectivityContext);
   const { isPrivacyMode, togglePrivacyMode } = usePrivacy();
   const { groups, loading: groupsLoading } = useUserGroups();
-  const { cards: sharedCards, loading: sharedCardsLoading, refetchOfflineCards: refetchOfflineSharedCards } = useAccessibleCards(groups, isConnected);
+  const { cards: sharedCards, loading: sharedCardsLoading, refetchOfflineCards: refetchOfflineSharedCards } = useAccessibleCards(groups, isConnected, groupsLoading);
 
   const currentUser = auth().currentUser;
   const displayName = currentUser?.displayName || 'CWallet User';
@@ -485,7 +485,7 @@ const Home: React.FC<Props> = ({ navigation }) => {
   const fetchCardsFromStorage = async () => {
     try {
       const cards = await getCardsFromSecureStorage();
-      if (cards && cards.length > 0) {
+      if (Array.isArray(cards)) {
         setCardData(cards);
       }
     } catch (e) {
