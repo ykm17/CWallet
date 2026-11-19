@@ -3,7 +3,7 @@ import React, { useContext, useState, useRef, useMemo } from 'react'
 import { Alert } from './CustomAlert'
 import { Card } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { convertLongNumberToText, formatCardLimit, maskCardNumber, removeSpaceFromString } from '../util/Utils'
+import { convertLongNumberToText, formatCardLimit, maskCardNumber, removeSpaceFromString, formatBillGenerationDate, formatCardUpdatedDate } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES, ENV } from '../constants/Constants'
 import { Button, Dialog, Icon, Portal, Text, Tooltip } from 'react-native-paper'
 import auth from '@react-native-firebase/auth';
@@ -132,7 +132,15 @@ const CustomCard: React.FC<CardProps> = ({
   const badgeLabel = [networkLabel, cardTypeLabel].filter(Boolean).join(' • ');
 
   const isDebitOrPluxee = cardDetails.cardType === 'DEBIT' || cardDetails.cardType === 'PREPAID' || cardDetails.bankName === 'PX';
+  const isCreditCard = cardDetails.cardType === 'CREDIT' || (!isDebitOrPluxee && (cardDetails.limit || cardDetails.billGenerationDate));
   const limitFormatted = isDebitOrPluxee ? '' : formatCardLimit(cardDetails.limit);
+  const billDateFormatted = isCreditCard && cardDetails.billGenerationDate
+    ? formatBillGenerationDate(cardDetails.billGenerationDate)
+    : '';
+
+  const updatedDateFormatted = formatCardUpdatedDate(
+    cardDetails.updatedAt ?? cardDetails.createdAt ?? cardDetails.addedAt
+  );
 
   const getCardCopyText = () => {
     const lines = [
@@ -145,6 +153,8 @@ const CustomCard: React.FC<CardProps> = ({
       `Exp: ${cardDetails.month}/${cardDetails.year}`,
       `Cvv: ${cardDetails.cvv}`,
       (!isDebitOrPluxee && cardDetails.limit) ? `Limit: ${cardDetails.limit}` : null,
+      billDateFormatted ? `Bill Date: ${billDateFormatted}` : null,
+      updatedDateFormatted ? `Updated: ${updatedDateFormatted}` : null,
     ].filter(Boolean);
     return lines.join('\n');
   };
@@ -303,7 +313,7 @@ const CustomCard: React.FC<CardProps> = ({
           ) : null}
         </View>
 
-        {/* Row 2: EMV Chip & Contactless wave (Left) + Optional Card Limit (Right) */}
+        {/* Row 2: EMV Chip & Contactless wave (Left) + Optional Bill Date & Card Limit (Right) */}
         <View style={styles.chipRow}>
           <View style={styles.chipAndWaveContainer}>
             <View style={styles.chipWrapper}>
@@ -314,14 +324,23 @@ const CustomCard: React.FC<CardProps> = ({
             </View>
           </View>
 
-          {limitFormatted ? (
-            <View style={styles.limitContainer}>
-              <Text style={styles.cardMicroLabel}>LIMIT</Text>
-              <Text style={styles.limitValueText}>
-                {isPrivacyMode ? '••••••' : limitFormatted}
-              </Text>
-            </View>
-          ) : null}
+          <View style={styles.metricsContainer}>
+            {limitFormatted ? (
+              <View style={styles.limitContainer}>
+                <Text style={styles.cardMicroLabel}>LIMIT</Text>
+                <Text style={styles.limitValueText}>
+                  {isPrivacyMode ? '••••••' : limitFormatted}
+                </Text>
+              </View>
+            ) : null}
+
+            {billDateFormatted ? (
+              <View style={styles.billDateContainer}>
+                <Text style={styles.cardMicroLabel}>BILL DATE</Text>
+                <Text style={styles.billDateValueText}>{billDateFormatted}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {/* Row 3: Card Number with Quick Copy Pill */}
@@ -378,38 +397,45 @@ const CustomCard: React.FC<CardProps> = ({
           ) : null}
         </View>
 
-        {/* Footer Row: Shared status or via group on left, Copy Whole Card on right */}
+        {/* Footer Row: Shared status or via group on left, Last updated in center, Copy Whole Card on right */}
         <View style={styles.cardFooterDivider} />
         <View style={styles.cardBottomRow}>
-          {hasLeftElement ? (
-            isOwner ? (
-              <TouchableOpacity
-                style={styles.sharedBadgeBtn}
-                onPress={() => setSharedGroupsVisible(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Icon source={sharedBadgeIcon} size={11.5} color="rgba(255, 255, 255, 0.9)" />
-                <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
-                  {sharedBadgeLabel}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.sharedBadgeBtn}
-                onPress={() => setSharedGroupsVisible(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Icon source="share-variant" size={11} color="rgba(255, 255, 255, 0.9)" />
-                <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
-                  {sharedBadgeLabel}
-                </Text>
-              </TouchableOpacity>
-            )
-          ) : (
-            <View style={{ flex: 1 }} />
-          )}
+          <View style={styles.cardBottomLeft}>
+            {hasLeftElement ? (
+              isOwner ? (
+                <TouchableOpacity
+                  style={styles.sharedBadgeBtn}
+                  onPress={() => setSharedGroupsVisible(true)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source={sharedBadgeIcon} size={11.5} color="rgba(255, 255, 255, 0.9)" />
+                  <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
+                    {sharedBadgeLabel}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.sharedBadgeBtn}
+                  onPress={() => setSharedGroupsVisible(true)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon source="share-variant" size={11} color="rgba(255, 255, 255, 0.9)" />
+                  <Text style={styles.sharedBadgeText} numberOfLines={1} ellipsizeMode="tail">
+                    {sharedBadgeLabel}
+                  </Text>
+                </TouchableOpacity>
+              )
+            ) : null}
+
+            {updatedDateFormatted ? (
+              <View style={styles.updatedBadge}>
+                <Icon source="clock-outline" size={10} color="rgba(255, 255, 255, 0.75)" />
+                <Text style={styles.updatedBadgeText}>Updated {updatedDateFormatted}</Text>
+              </View>
+            ) : null}
+          </View>
 
           <TouchableOpacity
             style={[
@@ -795,6 +821,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  metricsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  billDateContainer: {
+    alignItems: 'flex-end',
+  },
+  billDateValueText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   limitContainer: {
     alignItems: 'flex-end',
   },
@@ -922,6 +962,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  cardBottomLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+    marginRight: 6,
+  },
   sharedBadgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -930,13 +977,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 10,
-    maxWidth: '65%',
+    maxWidth: '52%',
   },
   sharedBadgeText: {
     color: 'rgba(255, 255, 255, 0.95)',
     fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.2,
+  },
+  updatedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 10,
+  },
+  updatedBadgeText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   accessGroupsContainer: {
     flexDirection: 'row',

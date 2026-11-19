@@ -434,27 +434,33 @@ const Home: React.FC<Props> = ({ navigation }) => {
       setIsSavingCard(true);
       console.log('Form submitted successfully!');
       savedCard.email = auth().currentUser?.email || '';
+      savedCard.updatedAt = Date.now();
+      if (!savedCard.createdAt && !savedCard.addedAt) {
+        savedCard.createdAt = Date.now();
+        savedCard.addedAt = Date.now();
+      }
       console.log("Card data before encryption:", savedCard);
       const encryptedData = encryptCardData(savedCard);
-      const cardDocData: Record<string, any> = {
-        ownerId: auth().currentUser?.uid,
-        encryptedData,
-        addedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        isPersonal: true,
-      };
-
-      console.log("Creating/updating card with data:", cardDocData);
+      const nowTs = serverTimestamp();
 
       if (savedCard.key) {
         console.log("Updating existing card:", savedCard.key);
-        const { addedAt, createdAt, ...updateData } = cardDocData;
-        await updateDoc(doc(db, 'cards', savedCard.key), updateData);
+        await updateDoc(doc(db, 'cards', savedCard.key), {
+          encryptedData,
+          updatedAt: nowTs,
+          billGenerationDate: savedCard.billGenerationDate || '',
+        });
       } else {
         console.log("Creating new card");
         await addDoc(collection(db, 'cards'), {
-          ...cardDocData,
+          ownerId: auth().currentUser?.uid,
+          encryptedData,
+          addedAt: nowTs,
+          createdAt: nowTs,
+          updatedAt: nowTs,
+          isPersonal: true,
           sharedGroupIds: [],
+          billGenerationDate: savedCard.billGenerationDate || '',
         });
       }
 

@@ -26,6 +26,13 @@ export const parseCardDocument = (snapshotDoc: any): Card | null => {
 
     const addedAt = toTimestampMillis(rawAddedAt) || undefined;
 
+    const rawUpdatedAt =
+      data.updatedAt ??
+      decryptedCard.updatedAt ??
+      rawAddedAt;
+
+    const updatedAt = toTimestampMillis(rawUpdatedAt) || addedAt;
+
     return {
       ...decryptedCard,
       key: snapshotDoc.id,
@@ -38,6 +45,8 @@ export const parseCardDocument = (snapshotDoc: any): Card | null => {
       isPersonal: decryptedCard.isPersonal ?? true,
       addedAt,
       createdAt: addedAt,
+      updatedAt,
+      billGenerationDate: decryptedCard.billGenerationDate || data.billGenerationDate || '',
     };
   } catch (error) {
     console.error('Error decrypting card:', snapshotDoc.id, error);

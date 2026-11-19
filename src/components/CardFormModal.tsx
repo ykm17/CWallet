@@ -49,6 +49,7 @@ const EMPTY_CARD: Card = {
   cvv: '',
   name: '',
   limit: '',
+  billGenerationDate: '',
   key: '',
   isPersonal: true,
   email: '',
@@ -395,6 +396,12 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       if (isEmpty(card.limit) || !/^\d+$/.test(card.limit)) {
         errs.limit = 'Card limit is empty or invalid';
       }
+      if (card.billGenerationDate && card.billGenerationDate.trim() !== '') {
+        const day = Number(card.billGenerationDate);
+        if (isNaN(day) || day < 1 || day > 31) {
+          errs.billGenerationDate = 'Day must be between 1 and 31';
+        }
+      }
     }
 
     return errs;
@@ -417,6 +424,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
       await onSubmit({
         ...cardRef.current,
         limit: shouldClearLimit ? '' : cardRef.current.limit,
+        billGenerationDate: shouldClearLimit ? '' : (cardRef.current.billGenerationDate?.trim() || ''),
       });
     } catch (err) {
       console.error('Error submitting form:', err);
@@ -660,11 +668,13 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                       const isNowDebitOrPluxee = key === 'DEBIT' || key === 'PREPAID' || card.bankName === 'PX';
                       if (isNowDebitOrPluxee) {
                         cardRef.current.limit = '';
+                        cardRef.current.billGenerationDate = '';
                       }
                       setCard(prev => ({
                         ...prev,
                         cardType: key,
                         limit: isNowDebitOrPluxee ? '' : prev.limit,
+                        billGenerationDate: isNowDebitOrPluxee ? '' : prev.billGenerationDate,
                       }));
                       closeTypeMenu();
                     }}
@@ -914,6 +924,36 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
               {touched.limit && errors.limit && (
                 <HelperText type="error" visible={true} style={styles.helperText}>
                   {errors.limit}
+                </HelperText>
+              )}
+
+              {/* Bill Generation Date - Optional for Credit Cards only */}
+              <TextInput
+                key={`billGenerationDate-${formKey}`}
+                label="Bill generation date (optional)"
+                placeholder="Day of month (e.g. 15)"
+                defaultValue={card.billGenerationDate ? String(card.billGenerationDate) : ''}
+                onChangeText={text => {
+                  const cleaned = text.replace(/[^0-9]/g, '');
+                  cardRef.current.billGenerationDate = cleaned;
+                  setCard(prev => ({ ...prev, billGenerationDate: cleaned }));
+                }}
+                maxLength={2}
+                keyboardType="numeric"
+                mode="outlined"
+                outlineColor={touched.billGenerationDate && errors.billGenerationDate ? '#DC2626' : '#E5E7EB'}
+                activeOutlineColor="#111111"
+                textColor="#111111"
+                placeholderTextColor="#9CA3AF"
+                outlineStyle={styles.inputOutline}
+                theme={inputTheme}
+                left={<TextInput.Icon icon="calendar-clock" size={20} color="#6B7280" />}
+                onBlur={() => handleBlur('billGenerationDate')}
+                style={styles.textInput}
+              />
+              {touched.billGenerationDate && errors.billGenerationDate && (
+                <HelperText type="error" visible={true} style={styles.helperText}>
+                  {errors.billGenerationDate}
                 </HelperText>
               )}
             </>
@@ -1172,6 +1212,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                   const isNowDebitOrPluxee = card.cardType === 'DEBIT' || card.cardType === 'PREPAID' || isPX;
                   if (isNowDebitOrPluxee) {
                     cardRef.current.limit = '';
+                    cardRef.current.billGenerationDate = '';
                     if (isPX && (!cardRef.current.cardType || cardRef.current.cardType === 'CREDIT')) {
                       cardRef.current.cardType = 'PREPAID';
                     }
@@ -1180,6 +1221,7 @@ const CardFormModal: React.FC<CardFormModalProps> = ({
                     ...prev,
                     bankName: item,
                     limit: isNowDebitOrPluxee ? '' : prev.limit,
+                    billGenerationDate: isNowDebitOrPluxee ? '' : prev.billGenerationDate,
                     cardType: (isPX && (!prev.cardType || prev.cardType === 'CREDIT')) ? 'PREPAID' : prev.cardType,
                   }));
                   setBankPickerVisible(false);

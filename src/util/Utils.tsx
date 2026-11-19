@@ -94,6 +94,8 @@ export const convertLongNumberToText = (num: number) => {
     }
 };
 
+import { toTimestampMillis } from '../services/sharingUtils';
+
 export const formatCardLimit = (limitValue: string | number): string => {
     const clean = typeof limitValue === 'string' ? limitValue.replace(/\D/g, '') : limitValue;
     const num = Number(clean);
@@ -109,4 +111,34 @@ export const formatCardLimit = (limitValue: string | number): string => {
         return `${val}K`;
     }
     return `${num}`;
+};
+
+export const formatBillGenerationDate = (val?: string | number): string => {
+    if (!val) return '';
+    const str = String(val).trim();
+    if (!str) return '';
+    const num = parseInt(str, 10);
+    if (!isNaN(num) && num >= 1 && num <= 31) {
+        const j = num % 10;
+        const k = num % 100;
+        let suffix = 'th';
+        if (j === 1 && k !== 11) suffix = 'st';
+        else if (j === 2 && k !== 12) suffix = 'nd';
+        else if (j === 3 && k !== 13) suffix = 'rd';
+        return `${num}${suffix}`;
+    }
+    return str;
+};
+
+export const formatCardUpdatedDate = (val?: any): string => {
+    const ms = toTimestampMillis(val);
+    if (!ms) return '';
+    const date = new Date(ms);
+    const now = new Date();
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    if (date.getFullYear() === now.getFullYear()) {
+        return `${day} ${month}`;
+    }
+    return `${day} ${month} '${String(date.getFullYear()).slice(-2)}`;
 };

@@ -34,6 +34,8 @@ export interface Card {
     },
     addedAt?: any,
     createdAt?: any,
+    updatedAt?: any,
+    billGenerationDate?: string,
     sharedAt?: any,
 }
 
