@@ -61,24 +61,57 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
       Alert.alert('Offline', 'You must be online to create or update a group.');
       return;
     }
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       return;
     }
     try {
       savingRef.current = true;
       setSaving(true);
       if (groupId) {
-        await updateGroup(groupId, { name, contributionPermission: permission });
+        await updateGroup(groupId, { name: trimmedName, contributionPermission: permission });
         savingRef.current = false;
         setSaving(false);
-        navigation.goBack();
+        Alert.alert(
+          'Group Updated',
+          `Group "${trimmedName}" has been updated successfully.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ],
+          {
+            cancelable: true,
+            onDismiss: () => navigation.goBack(),
+          },
+        );
       } else {
-        const createdId = await createGroup(name, permission);
+        await createGroup(trimmedName, permission);
         savingRef.current = false;
         setSaving(false);
-        navigation.replace('GroupDetails', { groupId: createdId });
+        Alert.alert(
+          'Group Created',
+          `Group "${trimmedName}" has been created successfully.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                navigation.navigate('Groups');
+              },
+            },
+          ],
+          {
+            cancelable: true,
+            onDismiss: () => {
+              navigation.navigate('Groups');
+            },
+          },
+        );
       }
     } catch (error: any) {
+      savingRef.current = false;
+      setSaving(false);
       Alert.alert('Could not save group', error.message || 'Please try again.');
     } finally {
       savingRef.current = false;

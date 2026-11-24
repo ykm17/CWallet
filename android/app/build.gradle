@@ -76,9 +76,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.cwallet"
+    namespace "com.ykm.ewallet"
     defaultConfig {
-        applicationId "com.cwallet"
+        applicationId "com.ykm.ewallet"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -117,6 +117,37 @@ android {
         jniLibs {
             useLegacyPackaging = false
         }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            def versionName = variant.versionName
+            def versionCode = variant.versionCode
+            def buildType = variant.buildType.name
+            outputFileName = "app-${buildType}-v${versionName}(${versionCode}).apk"
+        }
+    }
+}
+
+// AAB renaming task
+android.applicationVariants.all { variant ->
+    def renameTaskName = "rename${variant.name.capitalize()}Aab"
+    task "$renameTaskName" {
+        doLast {
+            def bundleDir = file("$buildDir/outputs/bundle/${variant.name}")
+            if (bundleDir.exists()) {
+                bundleDir.listFiles().each { file ->
+                    if (file.name.endsWith('.aab')) {
+                        def newName = "app-${variant.buildType.name}-v${variant.versionName}(${variant.versionCode}).aab"
+                        file.renameTo(new File(bundleDir, newName))
+                    }
+                }
+            }
+        }
+    }
+
+    tasks.matching { it.name.startsWith("bundle") && it.name.contains(variant.name.capitalize()) }.all {
+        finalizedBy renameTaskName
     }
 }
 

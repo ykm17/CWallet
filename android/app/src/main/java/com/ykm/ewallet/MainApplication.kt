@@ -1,4 +1,4 @@
-package com.cwallet
+package com.ykm.ewallet
 
 import android.app.Application
 import com.facebook.react.PackageList

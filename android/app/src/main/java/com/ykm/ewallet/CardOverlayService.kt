@@ -1,4 +1,4 @@
-package com.cwallet
+package com.ykm.ewallet
 
 import android.annotation.SuppressLint
 import android.app.Notification
@@ -38,7 +38,7 @@ class CardOverlayService : Service() {
     companion object {
         const val CHANNEL_ID = "card_overlay_channel"
         const val NOTIFICATION_ID = 4001
-        const val ACTION_DISMISS = "com.cwallet.ACTION_DISMISS_OVERLAY"
+        const val ACTION_DISMISS = "com.ykm.ewallet.ACTION_DISMISS_OVERLAY"
         const val AUTO_DISMISS_DELAY_MS = 3 * 60 * 1000L // 3 minutes
     }
 

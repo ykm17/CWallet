@@ -63,7 +63,7 @@
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor blackColor];
   
-  _videoDataQueue = dispatch_queue_create("com.cwallet.cardscanner.queue", DISPATCH_QUEUE_SERIAL);
+  _videoDataQueue = dispatch_queue_create("com.ykm.ewallet.cardscanner.queue", DISPATCH_QUEUE_SERIAL);
   
   [self setupCamera];
   [self setupOverlay];

@@ -102,11 +102,11 @@ const Home: React.FC<Props> = ({ navigation }) => {
   }, [cardData, groupNameById]);
 
   const isCardShared = useCallback((card: Card): boolean => {
-    const hasGroups = Array.isArray(card.sharedGroupIds) && card.sharedGroupIds.length > 0;
-    const hasUsers = Array.isArray(card.sharedWithUsers) && card.sharedWithUsers.length > 0;
-    const hasEmails = Array.isArray(card.sharedEmails) && card.sharedEmails.length > 0;
-    const hasUserIds = Array.isArray(card.sharedUserIds) && card.sharedUserIds.length > 0;
-    return hasGroups || hasUsers || hasEmails || hasUserIds;
+    const hasGroups = Array.isArray(card.sharedGroupIds) && card.sharedGroupIds.filter((gid) => gid && typeof gid === 'string' && gid.trim().length > 0).length > 0;
+    const hasUsers = Array.isArray(card.sharedWithUsers) && card.sharedWithUsers.filter((u) => u && (u.email || u.recipientUid || u.appleUserId)).length > 0;
+    const hasEmails = Array.isArray(card.sharedEmails) && card.sharedEmails.filter((e) => e && typeof e === 'string' && e.trim().length > 0).length > 0;
+    const hasUserIds = Array.isArray(card.sharedUserIds) && card.sharedUserIds.filter((id) => id && typeof id === 'string' && id.trim().length > 0).length > 0;
+    return Boolean(hasGroups || hasUsers || hasEmails || hasUserIds);
   }, []);
 
   const allSharedCards = useMemo<Card[]>(() => {
@@ -1552,14 +1552,23 @@ const Home: React.FC<Props> = ({ navigation }) => {
         <FlatList
           data={displayedCards}
           renderItem={({ item }) => {
-            const isOwnedCard = item.ownerId === currentUser?.uid || item.email === currentUser?.email;
+            const currentUid = currentUser?.uid;
+            const currentEmail = currentUser?.email?.toLowerCase().trim();
+            const cardOwnerEmail = item.email?.toLowerCase().trim();
+            const isOwnedCard = Boolean(
+              isCardPersonal === 'PRL' ||
+              (currentUid && item.ownerId === currentUid) ||
+              (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail) ||
+              item.isPersonal
+            );
             return (
               <CustomCard
                 cardDetails={item}
-                onCardLongPress={selectionMode ? toggleCardSelection : (isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? showModal : undefined)}
-                onCardEdit={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? showModal : undefined}
-                onShare={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? handleShareCard : undefined}
-                onUnshare={isConnected && (isCardPersonal === 'PRL' || isOwnedCard) ? handleUnshareCard : undefined}
+                groups={groups}
+                onCardLongPress={selectionMode ? toggleCardSelection : (isConnected && isOwnedCard ? showModal : undefined)}
+                onCardEdit={isConnected && isOwnedCard ? showModal : undefined}
+                onShare={isConnected && isOwnedCard ? handleShareCard : undefined}
+                onUnshare={isConnected && isOwnedCard ? handleUnshareCard : undefined}
                 selectionMode={selectionMode && isCardPersonal === 'PRL'}
                 isSelected={selectedCardIds.includes(item.key)}
                 onToggleSelect={toggleCardSelection}

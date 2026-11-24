@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj.apps.googleusercontent.com</string>
+	<string>566381520762-ft5maaupaofoakkovm3o7buja91clj5t.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj</string>
+	<string>com.googleusercontent.apps.566381520762-ft5maaupaofoakkovm3o7buja91clj5t</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>566381520762-2fmt01rpdo310sglqm8ripg8pun2i2hs.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,11 +15,11 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.cwallet</string>
+	<string>com.ykm.ewallet</string>
 	<key>PROJECT_ID</key>
 	<string>cwallet-8aac8</string>
 	<key>STORAGE_BUCKET</key>
-	<string>cwallet-8aac8.appspot.com</string>
+	<string>cwallet-8aac8.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +31,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:566381520762:ios:9e4900bd6abdf6cbe818c3</string>
+	<string>1:566381520762:ios:dbe92bffbaa04ae4e818c3</string>
+	<key>DATABASE_URL</key>
+	<string>https://cwallet-8aac8-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

@@ -1,4 +1,4 @@
-package com.cwallet
+package com.ykm.ewallet
 
 import android.app.Activity
 import android.content.Intent

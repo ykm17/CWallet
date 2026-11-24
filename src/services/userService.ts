@@ -69,6 +69,23 @@ export const findUserByAppleId = async (appleUserId: string): Promise<WalletUser
   return mapUser(userDoc.id, userDoc.data());
 };
 
+export const fetchUserByUid = async (uid: string): Promise<WalletUser | null> => {
+  const cleanUid = uid?.trim();
+  if (!cleanUid) {
+    return null;
+  }
+  try {
+    const snapshot = await getDoc(doc(db(), COLLECTIONS.USERS, cleanUid));
+    if (!snapshot.exists()) {
+      return null;
+    }
+    return mapUser(snapshot.id, snapshot.data());
+  } catch (err) {
+    console.error('Failed to fetch user by uid:', cleanUid, err);
+    return null;
+  }
+};
+
 export const isValidEmail = (email: string): boolean => {
   const trimmed = email.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);

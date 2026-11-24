@@ -3,7 +3,7 @@
     "project_number": "566381520762",
     "firebase_url": "https://cwallet-8aac8-default-rtdb.firebaseio.com",
     "project_id": "cwallet-8aac8",
-    "storage_bucket": "cwallet-8aac8.appspot.com"
+    "storage_bucket": "cwallet-8aac8.firebasestorage.app"
   },
   "client": [
     {
@@ -48,10 +48,62 @@
               "client_type": 3
             },
             {
-              "client_id": "566381520762-o6hem4qbv9hr3tk2mvrobslo0ua3n2gj.apps.googleusercontent.com",
+              "client_id": "566381520762-ft5maaupaofoakkovm3o7buja91clj5t.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.cwallet"
+                "bundle_id": "com.ykm.ewallet"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:566381520762:android:4cecbbe66b747e9be818c3",
+        "android_client_info": {
+          "package_name": "com.ykm.ewallet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "566381520762-1tekucrhl90gi7bfumshr6ssucslc5b7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ykm.ewallet",
+            "certificate_hash": "07ff0c797154252141be0e238dabedb8170f39a4"
+          }
+        },
+        {
+          "client_id": "566381520762-qou67ghgtueodl9qj3eej7r661al40ip.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ykm.ewallet",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "566381520762-men69odgck2o91alaa6fm6stubjpr1ng.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpWRZPbLCkLb75bSZfb_wuME6D6HVqlsE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "566381520762-men69odgck2o91alaa6fm6stubjpr1ng.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "566381520762-ft5maaupaofoakkovm3o7buja91clj5t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ykm.ewallet"
               }
             }
           ]

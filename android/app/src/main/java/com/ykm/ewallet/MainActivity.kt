@@ -1,4 +1,4 @@
-package com.cwallet
+package com.ykm.ewallet
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

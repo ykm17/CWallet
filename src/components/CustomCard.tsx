@@ -1,7 +1,7 @@
 import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator, Platform } from 'react-native'
 import React, { useContext, useState, useRef, useMemo } from 'react'
 import { Alert } from './CustomAlert'
-import { Card } from '../types/Types'
+import { Card, SharedPerson } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, formatCardLimit, maskCardNumber, removeSpaceFromString, formatBillGenerationDate, formatCardUpdatedDate } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES, ENV } from '../constants/Constants'
@@ -82,8 +82,14 @@ const CustomCard: React.FC<CardProps> = ({
     }, 2000);
   };
 
-  const isOwner = cardDetails.email === auth().currentUser?.email
-    || cardDetails.ownerId === auth().currentUser?.uid;
+  const currentUid = auth().currentUser?.uid;
+  const currentEmail = auth().currentUser?.email?.toLowerCase().trim();
+  const cardOwnerEmail = cardDetails.email?.toLowerCase().trim();
+  const isOwner = Boolean(
+    (currentUid && cardDetails.ownerId === currentUid) ||
+    (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail) ||
+    cardDetails.isPersonal
+  );
 
   const handlePress = () => {
     if (selectionMode) {
@@ -163,21 +169,62 @@ const CustomCard: React.FC<CardProps> = ({
     ? cardDetails.accessGroupNames
     : (cardDetails.sharedGroupIds || []).map((_, i) => `Group ${i + 1}`);
 
-  const sharedGroupCount = cardDetails.sharedGroupIds?.length || 0;
+  const sharedGroupCount = (cardDetails.sharedGroupIds || []).filter((g) => g && typeof g === 'string' && g.trim().length > 0).length;
 
   const sharedPeople = useMemo(() => {
-    const list = [...(cardDetails.sharedWithUsers || [])];
-    const existingEmails = new Set(list.map((p) => p.email?.toLowerCase()).filter(Boolean));
+    const list: SharedPerson[] = [...(cardDetails.sharedWithUsers || [])].filter((p) => p && (p.email || p.recipientUid || p.appleUserId));
+    const seenEmails = new Set(list.map((p) => p.email?.toLowerCase().trim()).filter(Boolean));
+    const seenUids = new Set(list.map((p) => p.recipientUid).filter(Boolean));
+    const seenAppleIds = new Set(list.map((p) => p.appleUserId).filter(Boolean));
+
     if (Array.isArray(cardDetails.sharedEmails)) {
       cardDetails.sharedEmails.forEach((email) => {
-        if (email && !existingEmails.has(email.toLowerCase())) {
-          existingEmails.add(email.toLowerCase());
-          list.push({ email });
+        if (email && typeof email === 'string' && email.trim()) {
+          const norm = email.toLowerCase().trim();
+          if (!seenEmails.has(norm)) {
+            seenEmails.add(norm);
+            list.push({ email: email.trim(), displayName: email.trim() });
+          }
         }
       });
     }
+
+    if (Array.isArray(cardDetails.sharedUserIds)) {
+      cardDetails.sharedUserIds.forEach((uid) => {
+        if (uid && typeof uid === 'string' && uid.trim()) {
+          const cleanUid = uid.trim();
+          if (!seenUids.has(cleanUid)) {
+            seenUids.add(cleanUid);
+            list.push({ recipientUid: cleanUid, displayName: 'User' });
+          }
+        }
+      });
+    }
+
+    if (Array.isArray(cardDetails.sharedAppleIds)) {
+      cardDetails.sharedAppleIds.forEach((appleId) => {
+        if (appleId && typeof appleId === 'string' && appleId.trim()) {
+          const cleanApple = appleId.trim();
+          if (!seenAppleIds.has(cleanApple)) {
+            seenAppleIds.add(cleanApple);
+            list.push({ appleUserId: cleanApple, displayName: 'Apple User' });
+          }
+        }
+      });
+    }
+
     return list;
-  }, [cardDetails.sharedWithUsers, cardDetails.sharedEmails]);
+  }, [cardDetails.sharedWithUsers, cardDetails.sharedEmails, cardDetails.sharedUserIds, cardDetails.sharedAppleIds]);
+
+  const isCardShared = useMemo(() => {
+    const hasGroupIds = Array.isArray(cardDetails.sharedGroupIds) && cardDetails.sharedGroupIds.filter((g) => g && String(g).trim().length > 0).length > 0;
+    const hasAccessGroups = Array.isArray(cardDetails.accessGroupNames) && cardDetails.accessGroupNames.filter((g) => g && String(g).trim().length > 0).length > 0;
+    const hasUsers = Array.isArray(cardDetails.sharedWithUsers) && cardDetails.sharedWithUsers.filter((u) => u && (u.email || u.recipientUid || u.appleUserId)).length > 0;
+    const hasEmails = Array.isArray(cardDetails.sharedEmails) && cardDetails.sharedEmails.filter((e) => e && String(e).trim().length > 0).length > 0;
+    const hasUserIds = Array.isArray(cardDetails.sharedUserIds) && cardDetails.sharedUserIds.filter((id) => id && String(id).trim().length > 0).length > 0;
+    const hasAccessUsers = Array.isArray(cardDetails.accessUserNames) && cardDetails.accessUserNames.filter(Boolean).length > 0;
+    return Boolean(hasGroupIds || hasAccessGroups || hasUsers || hasEmails || hasUserIds || hasAccessUsers);
+  }, [cardDetails]);
 
   const sharedPeopleCount = sharedPeople.length;
   const totalSharedCount = sharedGroupCount + sharedPeopleCount;
@@ -195,18 +242,8 @@ const CustomCard: React.FC<CardProps> = ({
       return `via (${recipientSourcesCount || 1})`;
     }
 
-    if (totalSharedCount === 1) {
-      if (groupNames.length === 1) {
-        return `Shared: ${groupNames[0]}`;
-      }
-      if (sharedPeople.length === 1) {
-        const person = sharedPeople[0];
-        const name = person.displayName || (person.email ? person.email.split('@')[0] : 'Friend');
-        return `Shared: ${name}`;
-      }
-    }
     return `Shared (${totalSharedCount})`;
-  }, [isOwner, recipientSourcesCount, accessGroups, accessUsers, cardDetails.ownerName, totalSharedCount, groupNames, sharedPeople]);
+  }, [isOwner, recipientSourcesCount, accessGroups, accessUsers, cardDetails.ownerName, totalSharedCount]);
 
   const sharedBadgeIcon = useMemo(() => {
     if (!isOwner) return 'share-variant';
@@ -274,7 +311,7 @@ const CustomCard: React.FC<CardProps> = ({
                   <Icon source="share-variant" color="#FFFFFF" size={14} />
                 </TouchableOpacity>
               )}
-              {onUnshare && totalSharedCount > 0 && (
+              {onUnshare && isCardShared && (
                 <TouchableOpacity
                   style={styles.actionIconBtn}
                   onPress={() => onUnshare(cardDetails)}
@@ -488,7 +525,7 @@ const CustomCard: React.FC<CardProps> = ({
               <ScrollView style={styles.groupsListContainer} bounces={false}>
                 {isOwner ? (
                   <>
-                    {groupNames.length > 0 && (
+                    {sharedGroupCount > 0 && groupNames.length > 0 && (
                       <View style={{ marginBottom: 8 }}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: '#6B7280', marginBottom: 4, textTransform: 'uppercase' }}>
                           Groups ({groupNames.length})

@@ -438,6 +438,7 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
           renderItem={({ item }) => (
             <CustomCard
               cardDetails={item}
+              groups={group ? [group] : undefined}
               showYourCardLabel={item.ownerId === uid || item.email === auth().currentUser?.email}
               onShare={
                 item.ownerId === uid || item.email === auth().currentUser?.email

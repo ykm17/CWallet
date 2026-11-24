@@ -518,68 +518,110 @@ export const unshareCardsFromPerson = async (
 
   const trimmed = recipientKeyOrIdentifier.trim();
   const normalizedKey = trimmed.toLowerCase();
+  const isEmail = normalizedKey.includes('@');
 
   let unsharedCount = 0;
 
   for (const cardId of uniqueCardIds) {
     await assertOwnsCard(cardId, uid);
+    const cardRef = doc(db(), COLLECTIONS.CARDS, cardId);
+    const cardSnap = await getDoc(cardRef);
+    if (!cardSnap.exists()) continue;
 
-    // Query cardUserAccess docs for this card and this recipient
-    const q1 = query(
-      collection(db(), COLLECTIONS.CARD_USER_ACCESS),
-      where('cardId', '==', cardId),
-      where('sharedBy', '==', uid),
-    );
-    const snap = await getDocs(q1);
+    const cardData = cardSnap.data() || {};
 
-    const matches = snap.docs.filter((docSnap: any) => {
-      const data = docSnap.data();
-      return (
-        docSnap.id === userAccessDocId(cardId, trimmed) ||
-        docSnap.id === userAccessDocId(cardId, `pending_${trimmed}`) ||
-        data.recipientUid === trimmed ||
-        data.recipientEmail?.toLowerCase() === normalizedKey ||
-        data.recipientAppleId === trimmed
-      );
+    // 1. Identify all matching person profiles on the card
+    const currentUsers: SharedPerson[] = Array.isArray(cardData.sharedWithUsers) ? cardData.sharedWithUsers : [];
+    const matchedEmails = new Set<string>();
+    const matchedUids = new Set<string>();
+    const matchedAppleIds = new Set<string>();
+
+    if (isEmail) {
+      matchedEmails.add(normalizedKey);
+    } else {
+      matchedUids.add(trimmed);
+      matchedAppleIds.add(trimmed);
+    }
+
+    currentUsers.forEach((u) => {
+      const emailMatches = u.email && u.email.toLowerCase().trim() === normalizedKey;
+      const uidMatches = u.recipientUid && u.recipientUid === trimmed;
+      const appleMatches = u.appleUserId && u.appleUserId === trimmed;
+      if (emailMatches || uidMatches || appleMatches) {
+        if (u.email) matchedEmails.add(u.email.toLowerCase().trim());
+        if (u.recipientUid) matchedUids.add(u.recipientUid);
+        if (u.appleUserId) matchedAppleIds.add(u.appleUserId);
+      }
     });
 
-    if (matches.length > 0) {
-      const batch = writeBatch(db());
-      const cardRef = doc(db(), COLLECTIONS.CARDS, cardId);
-      const cardSnap = await getDoc(cardRef);
-      const cardData = cardSnap.data() || {};
+    // 2. Query any cardUserAccess docs in Firestore for this card
+    const qAccess = query(
+      collection(db(), COLLECTIONS.CARD_USER_ACCESS),
+      where('cardId', '==', cardId),
+    );
+    const accessSnap = await getDocs(qAccess);
+    const accessDocsToDelete: any[] = [];
 
-      matches.forEach((d: any) => {
-        batch.delete(d.ref);
-      });
+    accessSnap.docs.forEach((docSnap: any) => {
+      const data = docSnap.data();
+      const docEmail = data.recipientEmail?.toLowerCase()?.trim() || '';
+      const docUid = data.recipientUid || '';
+      const docApple = data.recipientAppleId || '';
 
-      // Filter out the recipient from sharedWithUsers
-      const currentUsers: SharedPerson[] = cardData.sharedWithUsers || [];
-      const filteredUsers = currentUsers.filter((u) => {
-        return (
-          u.recipientUid !== trimmed &&
-          u.email?.toLowerCase() !== normalizedKey &&
-          u.appleUserId !== trimmed
-        );
-      });
+      const isMatch =
+        (docEmail && matchedEmails.has(docEmail)) ||
+        (docUid && matchedUids.has(docUid)) ||
+        (docApple && matchedAppleIds.has(docApple)) ||
+        docSnap.id === userAccessDocId(cardId, trimmed) ||
+        docSnap.id === userAccessDocId(cardId, `pending_${trimmed}`) ||
+        (isEmail && docSnap.id === userAccessDocId(cardId, `pending_${normalizedKey}`));
 
-      const updates: Record<string, any> = {
-        sharedWithUsers: filteredUsers,
-      };
-      if (cardData.sharedUserIds) {
-        updates.sharedUserIds = arrayRemove(trimmed);
+      if (isMatch) {
+        accessDocsToDelete.push(docSnap);
+        if (docEmail) matchedEmails.add(docEmail);
+        if (docUid) matchedUids.add(docUid);
+        if (docApple) matchedAppleIds.add(docApple);
       }
-      if (cardData.sharedEmails) {
-        updates.sharedEmails = arrayRemove(normalizedKey);
-      }
-      if (cardData.sharedAppleIds) {
-        updates.sharedAppleIds = arrayRemove(trimmed);
-      }
+    });
 
-      batch.update(cardRef, updates);
-      await batch.commit();
-      unsharedCount++;
-    }
+    // 3. Filter arrays in JS
+    const filteredUsers = currentUsers.filter((u) => {
+      const emailMatches = u.email && matchedEmails.has(u.email.toLowerCase().trim());
+      const uidMatches = u.recipientUid && matchedUids.has(u.recipientUid);
+      const appleMatches = u.appleUserId && matchedAppleIds.has(u.appleUserId);
+      return !emailMatches && !uidMatches && !appleMatches;
+    });
+
+    const currentEmails: string[] = Array.isArray(cardData.sharedEmails) ? cardData.sharedEmails : [];
+    const filteredEmails = currentEmails.filter(
+      (e) => typeof e === 'string' && !matchedEmails.has(e.toLowerCase().trim()) && e.trim().length > 0,
+    );
+
+    const currentUserIds: string[] = Array.isArray(cardData.sharedUserIds) ? cardData.sharedUserIds : [];
+    const filteredUserIds = currentUserIds.filter(
+      (id) => typeof id === 'string' && !matchedUids.has(id) && id.trim().length > 0,
+    );
+
+    const currentAppleIds: string[] = Array.isArray(cardData.sharedAppleIds) ? cardData.sharedAppleIds : [];
+    const filteredAppleIds = currentAppleIds.filter(
+      (id) => typeof id === 'string' && !matchedAppleIds.has(id) && id.trim().length > 0,
+    );
+
+    // 4. Commit batch
+    const batch = writeBatch(db());
+    accessDocsToDelete.forEach((d: any) => {
+      batch.delete(d.ref);
+    });
+
+    batch.update(cardRef, {
+      sharedWithUsers: filteredUsers,
+      sharedEmails: filteredEmails,
+      sharedUserIds: filteredUserIds,
+      sharedAppleIds: filteredAppleIds,
+    });
+
+    await batch.commit();
+    unsharedCount++;
   }
 
   return unsharedCount;

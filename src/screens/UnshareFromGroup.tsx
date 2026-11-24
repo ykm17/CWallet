@@ -79,6 +79,21 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     });
   }, [uid]);
 
+  const initialModeSetRef = useRef(false);
+  useEffect(() => {
+    if (initialModeSetRef.current || ownedCards.length === 0 || initialCardIds.length === 0) return;
+    initialModeSetRef.current = true;
+    if (lockedGroupId) return;
+    const targetCard = ownedCards.find((c) => initialCardIds.includes(c.key));
+    if (targetCard) {
+      const hasGroupShares = (targetCard.sharedGroupIds || []).filter(Boolean).length > 0;
+      const hasPersonShares = (targetCard.sharedWithUsers || []).length > 0 || (targetCard.sharedEmails || []).length > 0 || (targetCard.sharedUserIds || []).length > 0;
+      if (!hasGroupShares && hasPersonShares) {
+        setMode('person');
+      }
+    }
+  }, [ownedCards, initialCardIds, lockedGroupId]);
+
   const groupNameById = useMemo(
     () => groups.reduce<Record<string, string>>((acc, g) => { acc[g.groupId] = g.name; return acc; }, {}),
     [groups],
@@ -117,9 +132,12 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     const map = new Map<string, PersonAccessItem>();
     ownedCards.forEach((card) => {
       const isCardSelected = selectedCardIds.includes(card.key);
+      const seenOnCard = new Set<string>();
+
       (card.sharedWithUsers || []).forEach((p) => {
         const key = (p.email?.toLowerCase() || p.appleUserId || p.recipientUid || '').trim();
         if (!key) return;
+        seenOnCard.add(key);
         const existing = map.get(key);
         if (existing) {
           existing.totalCards += 1;
@@ -139,6 +157,28 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
           });
         }
       });
+
+      (card.sharedEmails || []).forEach((email) => {
+        const key = email.toLowerCase().trim();
+        if (!key || seenOnCard.has(key)) return;
+        seenOnCard.add(key);
+        const existing = map.get(key);
+        if (existing) {
+          existing.totalCards += 1;
+          if (isCardSelected) {
+            existing.cardCount += 1;
+          }
+        } else {
+          map.set(key, {
+            key,
+            identifier: email,
+            displayName: email,
+            email,
+            cardCount: isCardSelected ? 1 : 0,
+            totalCards: 1,
+          });
+        }
+      });
     });
     return Array.from(map.values());
   }, [ownedCards, selectedCardIds]);
@@ -150,14 +190,19 @@ const UnshareFromGroup: React.FC<Props> = ({ navigation, route }) => {
     for (const cardId of selectedCardIds) {
       const card = ownedCards.find((c) => c.key === cardId);
       const sharedUsers = card?.sharedWithUsers || [];
+      const sharedEmails = (card?.sharedEmails || []).map((e) => e.toLowerCase().trim());
+      const sharedUserIds = card?.sharedUserIds || [];
       for (const key of selectedPersonKeys) {
-        const normKey = key.toLowerCase();
-        const hasAccess = sharedUsers.some(
-          (u) =>
-            u.recipientUid === key ||
-            u.email?.toLowerCase() === normKey ||
-            u.appleUserId === key,
-        );
+        const normKey = key.toLowerCase().trim();
+        const hasAccess =
+          sharedUsers.some(
+            (u) =>
+              u.recipientUid === key ||
+              u.email?.toLowerCase().trim() === normKey ||
+              u.appleUserId === key,
+          ) ||
+          sharedEmails.includes(normKey) ||
+          sharedUserIds.includes(key);
         if (hasAccess) {
           pairs.push({ cardId, personKey: key });
         }

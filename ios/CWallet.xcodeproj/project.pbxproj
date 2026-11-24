@@ -469,7 +469,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ym.cwallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ykm.ewallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CWallet.app/CWallet";
 			};
@@ -494,7 +494,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ym.cwallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ykm.ewallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CWallet.app/CWallet";
 			};
@@ -522,7 +522,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ym.cwallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ykm.ewallet;
 				PRODUCT_NAME = CWallet;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -552,7 +552,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ym.cwallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ykm.ewallet;
 				PRODUCT_NAME = CWallet;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
