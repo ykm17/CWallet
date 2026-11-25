@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { upsertCurrentUserProfile } from '../services/userService';
 import { activatePendingMembershipsForUser } from '../services/groupService';
@@ -197,14 +197,31 @@ const Login: React.FC<Props> = ({ navigation }) => {
       isSigningInWithGoogle.current = true;
       setLoginDisabled(true);
 
-      const hasPlayServices = await GoogleSignin.hasPlayServices();
-      if (!hasPlayServices) {
-        throw new Error('Google Play Services not available');
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+      // Clean up any stale session before initiating sign-in
+      try {
+        await GoogleSignin.signOut();
+      } catch (_) {}
+
+      const response = await GoogleSignin.signIn();
+
+      if (!isSuccessResponse(response)) {
+        // User cancelled the prompt
+        return;
       }
 
-      await GoogleSignin.signIn();
-      const { idToken } = await GoogleSignin.getTokens();
-      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      let googleIdToken: string | null = response.data?.idToken || null;
+      if (!googleIdToken) {
+        const tokens = await GoogleSignin.getTokens().catch(() => null);
+        googleIdToken = tokens?.idToken || null;
+      }
+
+      if (!googleIdToken) {
+        throw new Error('Could not obtain Google ID token.');
+      }
+
+      const googleCredential = auth.GoogleAuthProvider.credential(googleIdToken);
       const userCredential = await auth().signInWithCredential(googleCredential);
       const currentUser = userCredential.user;
 
@@ -225,6 +242,9 @@ const Login: React.FC<Props> = ({ navigation }) => {
       }
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
+      if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
       const detailedMessage =
         error?.code || error?.message || (typeof error === 'string' ? error : 'Error signing in. Please try again.');
       setErrorMessage(`Sign-in failed: ${detailedMessage}`);
