@@ -1556,10 +1556,8 @@ const Home: React.FC<Props> = ({ navigation }) => {
             const currentEmail = currentUser?.email?.toLowerCase().trim();
             const cardOwnerEmail = item.email?.toLowerCase().trim();
             const isOwnedCard = Boolean(
-              isCardPersonal === 'PRL' ||
-              (currentUid && item.ownerId === currentUid) ||
-              (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail) ||
-              item.isPersonal
+              (currentUid && item.ownerId && item.ownerId === currentUid) ||
+              (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail)
             );
             return (
               <CustomCard

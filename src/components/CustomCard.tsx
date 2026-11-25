@@ -1,7 +1,7 @@
 import { StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View, ScrollView, ActivityIndicator, Platform } from 'react-native'
 import React, { useContext, useState, useRef, useMemo } from 'react'
 import { Alert } from './CustomAlert'
-import { Card, SharedPerson } from '../types/Types'
+import { Card, Group, SharedPerson } from '../types/Types'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { convertLongNumberToText, formatCardLimit, maskCardNumber, removeSpaceFromString, formatBillGenerationDate, formatCardUpdatedDate } from '../util/Utils'
 import { BANK_COLORS, BANK_DICTIONARY, CARD_NETWORKS, CARD_TYPES, ENV } from '../constants/Constants'
@@ -15,6 +15,7 @@ import BankLogo from './BankLogo'
 
 interface CardProps {
   cardDetails: Card,
+  groups?: Group[],
   onCardLongPress?: (card: Card) => void,
   onCardEdit?: (card: Card) => void,
   onShare?: (card: Card) => void,
@@ -27,6 +28,7 @@ interface CardProps {
 
 const CustomCard: React.FC<CardProps> = ({
   cardDetails,
+  groups,
   onCardLongPress,
   onCardEdit,
   onShare,
@@ -86,9 +88,8 @@ const CustomCard: React.FC<CardProps> = ({
   const currentEmail = auth().currentUser?.email?.toLowerCase().trim();
   const cardOwnerEmail = cardDetails.email?.toLowerCase().trim();
   const isOwner = Boolean(
-    (currentUid && cardDetails.ownerId === currentUid) ||
-    (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail) ||
-    cardDetails.isPersonal
+    (currentUid && cardDetails.ownerId && cardDetails.ownerId === currentUid) ||
+    (currentEmail && cardOwnerEmail && currentEmail === cardOwnerEmail)
   );
 
   const handlePress = () => {

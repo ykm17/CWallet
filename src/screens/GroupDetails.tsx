@@ -439,7 +439,10 @@ const GroupDetails: React.FC<Props> = ({ navigation, route }) => {
             <CustomCard
               cardDetails={item}
               groups={group ? [group] : undefined}
-              showYourCardLabel={item.ownerId === uid || item.email === auth().currentUser?.email}
+              showYourCardLabel={Boolean(
+                (uid && item.ownerId && item.ownerId === uid) ||
+                (auth().currentUser?.email && item.email && auth().currentUser?.email?.toLowerCase().trim() === item.email?.toLowerCase().trim())
+              )}
               onShare={
                 item.ownerId === uid || item.email === auth().currentUser?.email
                   ? (card) => navigation.navigate('ShareToGroup', { cardIds: [card.key] })
