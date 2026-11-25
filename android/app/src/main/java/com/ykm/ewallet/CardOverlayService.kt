@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -36,7 +37,7 @@ class CardOverlayService : Service() {
     private val autoDismissRunnable = Runnable { stopSelf() }
 
     companion object {
-        const val CHANNEL_ID = "card_overlay_channel"
+        const val CHANNEL_ID = "card_assistant_top_channel"
         const val NOTIFICATION_ID = 4001
         const val ACTION_DISMISS = "com.ykm.ewallet.ACTION_DISMISS_OVERLAY"
         const val AUTO_DISMISS_DELAY_MS = 3 * 60 * 1000L // 3 minutes
@@ -68,7 +69,12 @@ class CardOverlayService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         } catch (_: Exception) {}
 
-        showOverlayView(bankName, cardName, cardNumber, last4, expiry, cvv)
+        val canOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        if (canOverlay) {
+            showOverlayView(bankName, cardName, cardNumber, last4, expiry, cvv)
+        } else {
+            removeOverlayView()
+        }
 
         // Reset auto dismiss timer
         handler.removeCallbacks(autoDismissRunnable)
@@ -82,10 +88,12 @@ class CardOverlayService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Card Assistant",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Shows card details while making payments"
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
@@ -134,11 +142,13 @@ class CardOverlayService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(appPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 

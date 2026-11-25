@@ -6,6 +6,7 @@ import { APP_NAME, BANK_DICTIONARY } from '../constants/Constants';
 
 const { CardOverlayModule } = NativeModules;
 const OVERLAY_ENABLED_PREF_KEY = 'user_card_overlay_enabled_pref';
+const OVERLAY_PROMPTED_PREF_KEY = 'user_overlay_permission_prompted';
 
 /**
  * Checks whether the user has enabled the floating card assistant overlay.
@@ -119,11 +120,8 @@ export const requestAllAppPermissions = async (): Promise<{
       }
     }
 
-    // 2. Android Overlay Permission ("Display over other apps")
+    // 2. Check Android Overlay Permission status without opening Settings on login
     overlayGranted = await canDrawOverlays();
-    if (!overlayGranted) {
-      requestOverlayPermission();
-    }
   } else if (Platform.OS === 'ios') {
     // iOS Notification Permission (Alert, Sound, Badge)
     requestOverlayPermission();
@@ -134,41 +132,7 @@ export const requestAllAppPermissions = async (): Promise<{
   return { overlayGranted, notificationsGranted };
 };
 
-/**
- * Shows the floating overlay UI containing expiry and CVV,
- * and sends the app to the background so the user can easily pay in other apps.
- * Works on Android (floating draggable window over other apps) and iOS (system banner over other apps).
- */
-export const showCardOverlay = async (card: Card): Promise<boolean> => {
-  // If user disabled the floating card assistant overlay in Profile, skip
-  const isEnabled = await isOverlayFeatureEnabled();
-  if (!isEnabled) {
-    return false;
-  }
-
-  if (!CardOverlayModule?.showCardOverlay) {
-    return false;
-  }
-
-  // On Android, check if "Display over other apps" is allowed
-  if (Platform.OS === 'android') {
-    const hasPermission = await canDrawOverlays();
-    if (!hasPermission) {
-      Alert.alert(
-        'Display Over Other Apps',
-        'To show your card\'s Expiry and CVV in a floating overlay while paying in other apps, enable "Display over other apps" in Settings.',
-        [
-          { text: 'Not Now', style: 'cancel' },
-          {
-            text: 'Open Settings',
-            onPress: () => requestOverlayPermission(),
-          },
-        ],
-      );
-      return false;
-    }
-  }
-
+const launchOverlayService = async (card: Card): Promise<boolean> => {
   const month = card.month ? card.month.padStart(2, '0') : '';
   const year = card.year ? card.year.slice(-2) : '';
   const expiry = month && year ? `${month}/${year}` : month || year || '';
@@ -194,6 +158,60 @@ export const showCardOverlay = async (card: Card): Promise<boolean> => {
     console.warn('Could not launch card overlay:', error);
     return false;
   }
+};
+
+/**
+ * Shows the floating overlay UI (or top notification fallback if overlay permission
+ * is unavailable/restricted) containing card number, expiry, and CVV,
+ * and sends the app to the background so the user can easily pay in other apps.
+ */
+export const showCardOverlay = async (card: Card): Promise<boolean> => {
+  // If user disabled the floating card assistant overlay in Profile, skip
+  const isEnabled = await isOverlayFeatureEnabled();
+  if (!isEnabled) {
+    return false;
+  }
+
+  if (!CardOverlayModule?.showCardOverlay) {
+    return false;
+  }
+
+  // On Android, ask for overlay permission only when required; fall back to top notification
+  if (Platform.OS === 'android') {
+    const hasPermission = await canDrawOverlays();
+    if (!hasPermission) {
+      let alreadyPrompted = false;
+      try {
+        alreadyPrompted = (await EncryptedStorage.getItem(OVERLAY_PROMPTED_PREF_KEY)) === 'true';
+      } catch {}
+
+      if (!alreadyPrompted) {
+        try {
+          await EncryptedStorage.setItem(OVERLAY_PROMPTED_PREF_KEY, 'true');
+        } catch {}
+
+        Alert.alert(
+          'Display Over Other Apps',
+          'Allow "Display over other apps" to show a floating card window, or use the top notification if your device restricts overlays.',
+          [
+            {
+              text: 'Use Notification',
+              onPress: () => {
+                launchOverlayService(card);
+              },
+            },
+            {
+              text: 'Open Settings',
+              onPress: () => requestOverlayPermission(),
+            },
+          ],
+        );
+        return false;
+      }
+    }
+  }
+
+  return await launchOverlayService(card);
 };
 
 /**

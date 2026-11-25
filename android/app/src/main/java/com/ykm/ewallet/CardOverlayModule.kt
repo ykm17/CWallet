@@ -55,12 +55,6 @@ class CardOverlayModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun showCardOverlay(cardData: ReadableMap, promise: Promise) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(reactContext)) {
-                requestOverlayPermission()
-                promise.resolve(false)
-                return
-            }
-
             val intent = Intent(reactContext, CardOverlayService::class.java).apply {
                 putExtra("bankName", cardData.getString("bankName") ?: "")
                 putExtra("cardName", cardData.getString("cardName") ?: "")

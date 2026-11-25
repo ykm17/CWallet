@@ -59,17 +59,6 @@ const Login: React.FC<Props> = ({ navigation }) => {
     });
 
     initBiometrics();
-
-    // Automatically ask all permissions needed on the login page
-    const timer = setTimeout(() => {
-      requestAllAppPermissions().catch((e) => {
-        console.log('Error requesting permissions:', e);
-      });
-    }, 600);
-
-    return () => {
-      clearTimeout(timer);
-    };
   }, [initBiometrics]);
 
   const cacheAuthSession = async (user: { uid: string; email?: string | null; displayName?: string | null }) => {
@@ -226,6 +215,9 @@ const Login: React.FC<Props> = ({ navigation }) => {
           activatePendingMembershipsForUser(),
           activatePendingCardAccessForUser(),
         ]);
+        requestAllAppPermissions().catch((e) => {
+          console.log('Error requesting permissions:', e);
+        });
         navigation.reset({
           index: 0,
           routes: [{ name: 'Home' }],
