@@ -9,6 +9,7 @@ import {
   Image,
   Platform,
   AppState,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -67,6 +68,18 @@ const Profile: React.FC<Props> = ({ navigation }) => {
 
     return () => sub.remove();
   }, [loadPreferences]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (logoutDialogVisible) {
+        setLogoutDialogVisible(false);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [logoutDialogVisible]);
 
   const handleToggleOverlay = async (value: boolean) => {
     setOverlayEnabled(value);

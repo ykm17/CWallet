@@ -97,14 +97,14 @@ const GroupForm: React.FC<Props> = ({ navigation, route }) => {
             {
               text: 'OK',
               onPress: () => {
-                navigation.navigate('Groups');
+                navigation.goBack();
               },
             },
           ],
           {
             cancelable: true,
             onDismiss: () => {
-              navigation.navigate('Groups');
+              navigation.goBack();
             },
           },
         );

@@ -31,6 +31,14 @@
           }
         },
         {
+          "client_id": "566381520762-flsk0ghj0jibe46cpauqjfk5dgb7poo7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ykm.ewallet",
+            "certificate_hash": "41ad8495d3d04c766a679718073dcfdaddad66ea"
+          }
+        },
+        {
           "client_id": "566381520762-qou67ghgtueodl9qj3eej7r661al40ip.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

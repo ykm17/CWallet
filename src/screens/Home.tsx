@@ -346,6 +346,12 @@ const Home: React.FC<Props> = ({ navigation }) => {
           setExitModalVisible(false);
           return true;
         }
+        // If there's a previous screen in the stack, navigate back to it
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
+
         // At root Home screen with no modals or selection: show custom exit dialog
         setExitModalVisible(true);
         return true;
